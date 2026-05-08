@@ -1,0 +1,46 @@
+@{
+    ViewData["Title"] = "Login";
+}
+
+<div class="auth-shell">
+    <section class="auth-copy">
+        <span class="eyebrow">Sign In</span>
+        <h1>Pick up your fitting sessions where you left them.</h1>
+        <p>Log in to access customer uploads, saved history, and the camera-ready try-on studio.</p>
+    </section>
+
+    <form asp-action="Login" method="post" class="auth-card">
+        <div asp-validation-summary="All" class="text-danger small mb-3"></div>
+
+        <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input name="Email" type="email" class="form-control" placeholder="name@example.com" required />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Password</label>
+            <div class="password-field">
+                <input name="Password"
+                       type="password"
+                       class="form-control password-input"
+                       placeholder="Enter your password"
+                       autocomplete="current-password"
+                       required />
+                <button type="button" class="password-toggle" data-password-toggle aria-label="Show password">
+                    <i class="bi bi-eye"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="text-end mb-3">
+            <a asp-action="ForgotPassword" class="inline-link">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="btn btn-brand w-100">Sign In</button>
+
+        <p class="auth-switch">
+            New here?
+            <a asp-controller="Registration" asp-action="Index" class="inline-link">Create account</a>
+        </p>
+    </form>
+</div>

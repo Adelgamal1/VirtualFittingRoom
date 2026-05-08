@@ -1,0 +1,13 @@
+﻿@model VirtualFittingRoom.Models.UserImage
+
+<h3 class="text-center mb-3">Preview Image</h3>
+
+<img src="data:@Model.ImageType;base64,@Convert.ToBase64String(Model.ImageData)"
+     class="img-fluid rounded shadow d-block mx-auto"
+     style="max-height:400px;" />
+
+<a asp-action="Download"
+   asp-route-id="@Model.Id"
+   class="btn btn-secondary w-100 mt-3 text-center">
+    ⬇ Download Image
+</a>

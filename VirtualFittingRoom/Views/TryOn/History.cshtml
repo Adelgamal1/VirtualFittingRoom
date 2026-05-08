@@ -1,0 +1,64 @@
+@model List<VirtualFittingRoom.Models.HistoryItemViewModel>
+@{
+    ViewData["Title"] = "History";
+}
+
+<section class="page-heading">
+    <span class="eyebrow">History</span>
+    <h1>Your fitting sessions</h1>
+    <p>Review the latest fitting results, open any image in full size, and download it whenever you need.</p>
+</section>
+
+@if (!Model.Any())
+{
+    <div class="empty-state">
+        <h3>No sessions yet</h3>
+        <p>Your saved fitting shots will appear here after the first upload.</p>
+        <a asp-controller="Home" asp-action="Index" class="btn btn-brand">Go To Home Studio</a>
+    </div>
+}
+else
+{
+    <div class="history-grid history-grid-compact">
+        @foreach (var img in Model)
+        {
+            <article class="history-card">
+                <button type="button"
+                        class="history-image-button"
+                        data-history-image="@img.ImageUrl"
+                        data-history-date="@img.CreatedAt.ToString("dd MMM yyyy - hh:mm tt")"
+                        data-history-download="@Url.Action("Download", "TryOn", new { id = img.Id })">
+                    <img src="@img.ImageUrl" alt="Saved fitting image" />
+                </button>
+
+                <div class="history-card-body">
+                    <div class="history-meta">
+                        <span class="badge-soft">@(img.Rating ?? "Pending review")</span>
+                        <span>@img.CreatedAt.ToString("dd MMM yyyy - hh:mm tt")</span>
+                    </div>
+
+                    <h3>Saved fitting result</h3>
+                    <p>Tap the image to zoom in, then download the full result if needed.</p>
+
+                    <a asp-action="Download"
+                       asp-route-id="@img.Id"
+                       class="btn btn-ghost w-100">
+                        Download Capture
+                    </a>
+                </div>
+            </article>
+        }
+    </div>
+
+    <div class="history-modal d-none" data-history-modal>
+        <div class="history-modal-backdrop" data-history-close></div>
+        <div class="history-modal-dialog">
+            <button type="button" class="history-close" data-history-close aria-label="Close preview">x</button>
+            <img src="" alt="Expanded fitting result" data-history-modal-image />
+            <div class="history-modal-footer">
+                <span data-history-modal-date></span>
+                <a href="#" class="btn btn-brand" data-history-modal-download>Download</a>
+            </div>
+        </div>
+    </div>
+}

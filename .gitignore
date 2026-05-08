@@ -1,0 +1,44 @@
+# Visual Studio / .NET
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+VirtualFittingRoom/.venv-catvton/
+
+# Local/generated test output
+.tmp-smoke/
+VirtualFittingRoom/.tmp-smoke/
+*.log
+
+# Environment and local secrets
+.env
+.env.*
+secrets.json
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Database files
+*.mdf
+*.ldf
+
+# Model/checkpoint weights should use Git LFS if committed intentionally.
+*.bin
+*.safetensors
+*.pth
+*.pkl

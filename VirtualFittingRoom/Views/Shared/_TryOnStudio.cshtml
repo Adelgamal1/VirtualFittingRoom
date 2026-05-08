@@ -1,0 +1,115 @@
+@{
+    var isLoggedIn = Context.Session.GetInt32("UserId") != null;
+}
+
+<section class="studio-panel">
+    <div class="studio-copy">
+        <span class="eyebrow">Smart Try-On</span>
+        <h2>Build your fitting preview from camera or dual image upload.</h2>
+        <p>
+            Capture the customer's pose live, or upload one pose image plus one clothing image.
+            The current flow stores the session shot and prepares it for the next fitting step.
+        </p>
+
+        <div class="feature-pills">
+            <span>Live camera capture</span>
+            <span>Pose + clothing upload</span>
+            <span>History tracking</span>
+        </div>
+    </div>
+
+    <form asp-controller="TryOn" asp-action="StartSession" method="post" enctype="multipart/form-data" class="studio-form" data-tryon-form>
+        <div asp-validation-summary="All" class="text-danger small mb-3"></div>
+
+        <div class="segmented-toggle" role="group" aria-label="Choose source">
+            <button type="button" class="toggle-chip is-active" data-source-trigger="camera">Camera</button>
+            <button type="button" class="toggle-chip" data-source-trigger="upload">Upload Files</button>
+        </div>
+
+        <input type="hidden" name="imageData" id="imageData" data-image-data />
+        <input type="hidden" name="clothingImageData" id="clothingImageData" data-clothing-image-data />
+
+        <div class="studio-grid">
+            <div class="field-card">
+                <label class="form-label">Customer Pose</label>
+
+                <div class="camera-shell" data-camera-section>
+                    <video id="video" autoplay playsinline muted data-camera-feed></video>
+                    <canvas id="canvas" data-camera-canvas></canvas>
+                    <div class="camera-overlay">Frame shoulders to knees for the best fit.</div>
+                </div>
+
+                <div class="action-row">
+                    <button type="button" class="btn btn-brand" data-open-camera>Open Camera</button>
+                    <button type="button" class="btn btn-ghost" data-capture-photo>Capture</button>
+                </div>
+
+                <div class="upload-block d-none" data-pose-upload-section>
+                    <input type="file" name="imageFile" class="form-control" accept="image/*" data-pose-upload />
+                </div>
+
+                <div class="preview-shell">
+                    <img alt="Pose preview" class="preview-image d-none" data-pose-preview />
+                    <p class="preview-empty" data-pose-empty>No pose selected yet.</p>
+                </div>
+            </div>
+
+            <div class="field-card">
+                <label class="form-label" for="clothingFile">Clothing Image</label>
+                <input id="clothingFile" type="file" name="clothingFile" class="form-control" accept="image/*" data-clothing-upload required />
+
+                <div class="preview-shell">
+                    <img alt="Clothing preview" class="preview-image d-none" data-clothing-preview />
+                    <p class="preview-empty" data-clothing-empty>Upload the garment photo on a plain background if possible.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="studio-grid compact">
+            <div>
+                <label class="form-label">Target Gender</label>
+                <select name="Gender" class="form-select" required>
+                    <option value="">Select target body</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="form-label">Clothing Category</label>
+                <select id="clothing" name="ClothingType" class="form-select" required>
+                    <option value="">Select category</option>
+                    <option value="T-Shirt">T-Shirt</option>
+                    <option value="Shirt">Shirt</option>
+                    <option value="Hoodie">Hoodie</option>
+                    <option value="Jacket">Jacket</option>
+                    <option value="Dress">Dress</option>
+                    <option value="Pants">Pants</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="studio-grid compact">
+            <div>
+                <label class="form-label">Garment Area</label>
+                <select name="GarmentArea" class="form-select" required>
+                    <option value="">Select fitting area</option>
+                    <option value="upper">Upper</option>
+                    <option value="lower">Lower</option>
+                    <option value="overall">Overall</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="submit-row">
+            @if (!isLoggedIn)
+            {
+                <p class="signin-hint">
+                    You can explore the interface now. Submitting will ask you to sign in first.
+                </p>
+            }
+
+            <button type="submit" class="btn btn-brand w-100">Start Fitting Session</button>
+        </div>
+    </form>
+</section>

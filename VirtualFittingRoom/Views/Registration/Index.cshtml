@@ -1,0 +1,94 @@
+@model VirtualFittingRoom.Models.UserMeasurement
+
+@{
+    ViewData["Title"] = "Sign Up";
+}
+
+<div class="auth-shell auth-shell-wide">
+    <section class="auth-copy">
+        <span class="eyebrow">Sign Up</span>
+        <h1>Create a shopper profile with body details ready for try-on sessions.</h1>
+        <p>Account data and basic measurements help organize the virtual fitting flow for returning users.</p>
+    </section>
+
+    <form asp-action="Index" method="post" class="auth-card auth-card-wide">
+        <div asp-validation-summary="All" class="text-danger mb-3"></div>
+
+        <div class="form-split">
+            <div>
+                <label class="form-label">Full Name</label>
+                <input asp-for="FullName" class="form-control" />
+                <span asp-validation-for="FullName" class="text-danger"></span>
+            </div>
+
+            <div>
+                <label class="form-label">Email</label>
+                <input asp-for="Email" class="form-control" />
+                <span asp-validation-for="Email" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div class="form-split">
+            <div>
+                <label class="form-label">Phone Number</label>
+                <input asp-for="PhoneNumber" class="form-control" />
+                <span asp-validation-for="PhoneNumber" class="text-danger"></span>
+            </div>
+
+            <div>
+                <label class="form-label">Gender</label>
+                <select asp-for="Gender" class="form-select">
+                    <option value="">Select</option>
+                    <option>Male</option>
+                    <option>Female</option>
+                </select>
+                <span asp-validation-for="Gender" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div class="form-split">
+            <div>
+                <label class="form-label">Password</label>
+                <input asp-for="Password" type="password" class="form-control" id="password" />
+                <span asp-validation-for="Password" class="text-danger"></span>
+            </div>
+
+            <div>
+                <label class="form-label">Confirm Password</label>
+                <input asp-for="ConfirmPassword" type="password" class="form-control" id="confirmPassword" />
+                <span asp-validation-for="ConfirmPassword" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div class="form-split">
+            <div>
+                <label class="form-label">Age</label>
+                <input asp-for="Age" type="number" class="form-control" />
+                <span asp-validation-for="Age" class="text-danger"></span>
+            </div>
+
+            <div>
+                <label class="form-label">Weight (kg)</label>
+                <input asp-for="Weight" type="number" class="form-control" />
+                <span asp-validation-for="Weight" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div>
+            <label class="form-label">Height (cm)</label>
+            <input asp-for="Height" type="number" class="form-control" />
+            <span asp-validation-for="Height" class="text-danger"></span>
+        </div>
+
+        <button type="submit" class="btn btn-brand w-100 mt-4">Create Account</button>
+
+        <p class="auth-switch">
+            Already have an account?
+            <a asp-controller="Account" asp-action="Login" class="inline-link">Sign in</a>
+        </p>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}
