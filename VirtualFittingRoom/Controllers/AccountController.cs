@@ -1,10 +1,14 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using VirtualFittingRoom.Data;
+using VirtualFittingRoom.Models;
 using VirtualFittingRoom.Services;
 
 namespace VirtualFittingRoom.Controllers
@@ -12,16 +16,23 @@ namespace VirtualFittingRoom.Controllers
     public class AccountController : Controller
     {
         private readonly AppDbContext _context;
+        private readonly IConfiguration _configuration;
 
-        public AccountController(AppDbContext context)
+        public AccountController(AppDbContext context, IConfiguration configuration)
         {
             _context = context;
+            _configuration = configuration;
         }
 
         // ================= LOGIN =================
         [HttpGet]
-        public IActionResult Login()
+        public IActionResult Login(string? externalError = null)
         {
+            if (!string.IsNullOrWhiteSpace(externalError))
+            {
+                ModelState.AddModelError("", externalError);
+            }
+
             return View();
         }
 
@@ -43,7 +54,98 @@ namespace VirtualFittingRoom.Controllers
 
             HttpContext.Session.SetInt32("UserId", user.Id);
 
-            return RedirectToAction("Index", "Home");
+            return RedirectToAction("Index", "TryOn");
+        }
+
+        // ================= SOCIAL LOGIN / SIGN UP =================
+        [HttpGet]
+        public IActionResult ExternalLogin(string provider, string returnUrl = "/TryOn")
+        {
+            var allowedProviders = new[] { "Google", "Facebook", "Apple" };
+            var selectedProvider = allowedProviders
+                .FirstOrDefault(p => string.Equals(p, provider, StringComparison.OrdinalIgnoreCase));
+
+            if (selectedProvider == null)
+            {
+                ModelState.AddModelError("", "Unsupported sign-in provider");
+                return View("Login");
+            }
+
+            if (!IsProviderConfigured(selectedProvider))
+            {
+                ModelState.AddModelError("", $"{selectedProvider} sign-in is not configured yet");
+                return View("Login");
+            }
+
+            var redirectUrl = Url.Action(
+                nameof(ExternalLoginCallback),
+                "Account",
+                new { returnUrl },
+                Request.Scheme,
+                Request.Host.ToString());
+            var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
+
+            return Challenge(properties, selectedProvider);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ExternalLoginCallback(string returnUrl = "/TryOn")
+        {
+            var result = await HttpContext.AuthenticateAsync("External");
+
+            if (!result.Succeeded || result.Principal == null)
+            {
+                ModelState.AddModelError("", "Social sign-in was not completed");
+                return View("Login");
+            }
+
+            var email = result.Principal.FindFirstValue(ClaimTypes.Email);
+            var fullName = result.Principal.FindFirstValue(ClaimTypes.Name)
+                ?? result.Principal.FindFirstValue("name")
+                ?? email;
+            var providerName = result.Properties?.Items.TryGetValue(".AuthScheme", out var scheme) == true
+                ? scheme
+                : "Social";
+            var providerUserId = result.Principal.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                if (string.IsNullOrWhiteSpace(providerUserId))
+                {
+                    await HttpContext.SignOutAsync("External");
+                    ModelState.AddModelError("", "The selected provider did not return enough account information");
+                    return View("Login");
+                }
+
+                email = $"{providerName.ToLowerInvariant()}-{providerUserId}@social.local";
+            }
+
+            var normalizedEmail = email.Trim();
+            var user = await _context.UserMeasurements
+                .FirstOrDefaultAsync(u => u.Email == normalizedEmail);
+
+            if (user == null)
+            {
+                user = new UserMeasurement
+                {
+                    FullName = fullName ?? normalizedEmail,
+                    Email = normalizedEmail,
+                    PhoneNumber = "Social login",
+                    PasswordHash = HashPassword(Guid.NewGuid().ToString("N")),
+                    Age = 18,
+                    Weight = 0,
+                    Height = 0,
+                    Gender = "Unspecified"
+                };
+
+                _context.UserMeasurements.Add(user);
+                await _context.SaveChangesAsync();
+            }
+
+            HttpContext.Session.SetInt32("UserId", user.Id);
+            await HttpContext.SignOutAsync("External");
+
+            return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl : "/TryOn");
         }
 
         // ================= FORGOT PASSWORD =================
@@ -141,6 +243,25 @@ namespace VirtualFittingRoom.Controllers
             return Convert.ToBase64String(
                 sha256.ComputeHash(Encoding.UTF8.GetBytes(password))
             );
+        }
+
+        private bool IsProviderConfigured(string provider)
+        {
+            return provider switch
+            {
+                "Google" => HasConfig("Authentication:Google:ClientId")
+                    && HasConfig("Authentication:Google:ClientSecret"),
+                "Facebook" => HasConfig("Authentication:Facebook:AppId")
+                    && HasConfig("Authentication:Facebook:AppSecret"),
+                "Apple" => HasConfig("Authentication:Apple:ClientId")
+                    && HasConfig("Authentication:Apple:ClientSecret"),
+                _ => false
+            };
+        }
+
+        private bool HasConfig(string key)
+        {
+            return !string.IsNullOrWhiteSpace(_configuration[key]);
         }
     }
 }

@@ -2,13 +2,13 @@
 
 ## Goal
 
-Deploy the ASP.NET MVC website to Azure App Service, move the database to Azure SQL, and keep AI inference as a separate API.
+Deploy the ASP.NET MVC website to Azure App Service, move the database to Azure SQL, and run virtual try-on through Replicate.
 
 ## Current architecture
 
 - Website: ASP.NET MVC
 - Database: currently local SQL/LocalDB
-- AI: should be a separate API endpoint
+- AI: Replicate prediction API
 
 ## Important note
 
@@ -18,7 +18,7 @@ Use this split:
 
 1. Web App on Azure App Service
 2. Database on Azure SQL
-3. AI as external API
+3. AI as Replicate hosted inference
 
 ## Phase 1 - Deploy the website first
 
@@ -76,14 +76,19 @@ Value:
 
 Add:
 
-- `VirtualTryOn__Mode` = `Api`
-- `VirtualTryOn__ApiUrl` = `https://YOUR-AI-API.azurewebsites.net/tryon`
-- `VirtualTryOn__ApiKey` = leave empty unless your API uses a key
-- `VirtualTryOn__ApiKeyHeader` = `Authorization`
-- `VirtualTryOn__ApiPersonFieldName` = `person_image`
-- `VirtualTryOn__ApiClothingFieldName` = `garment_image`
-- `VirtualTryOn__ApiCategoryFieldName` = `category`
-- `VirtualTryOn__ApiResponseImageField` = `outputImageBase64`
+- `ASPNETCORE_ENVIRONMENT` = `Production`
+- `VirtualTryOn__Mode` = `Replicate`
+- `REPLICATE_API_TOKEN` = `r8_YOUR_REAL_REPLICATE_TOKEN`
+- `VirtualTryOn__ReplicateVersion` = `cf5cb07a25e726fe2fac166a8c5ab52ddccd48657741670fb09d9954d4d8446f`
+- `VirtualTryOn__ReplicatePersonFieldName` = `person_image`
+- `VirtualTryOn__ReplicateClothingFieldName` = `cloth_image`
+- `VirtualTryOn__ReplicateCategoryFieldName` = `cloth_type`
+
+Alternative token setting:
+
+- `VirtualTryOn__ReplicateApiToken` = `r8_YOUR_REAL_REPLICATE_TOKEN`
+
+Use either `REPLICATE_API_TOKEN` or `VirtualTryOn__ReplicateApiToken`, not both.
 
 ## Phase 3 - Publish the ASP.NET MVC app
 
@@ -108,23 +113,36 @@ After Azure SQL is ready:
 2. Run Entity Framework migrations against Azure SQL
 3. Confirm tables are created
 
-## Phase 5 - AI API
+## Phase 5 - Replicate AI
 
-The web app should call an external AI API.
+The web app calls Replicate directly from the server. Do not expose the Replicate token in frontend JavaScript or checked-in config files.
 
 Recommended order:
 
 1. First deploy the website only
 2. Confirm login, pages, uploads, and DB work
-3. Then connect the AI API
+3. Add `REPLICATE_API_TOKEN` in Azure App Service configuration
+4. Restart the App Service
+5. Test the try-on flow from a phone browser
 
 ## Phase 6 - Fallback plan if AI fails
 
-If the heavy model cannot run reliably on free infrastructure:
+If Replicate inference fails:
 
-1. Replace the AI backend with a lighter ready model
-2. Or switch to a lightweight body/garment overlay pipeline
-3. Or retrain/adapt a smaller model later
+1. Confirm `REPLICATE_API_TOKEN` is configured in Azure
+2. Confirm the Replicate account has billing/credit available
+3. Check the returned Replicate HTTP error in the website error message
+4. If the selected model is unavailable, replace `VirtualTryOn__ReplicateVersion` with another working Replicate model version
+
+## Free local demo mode
+
+For a no-payment local demo, use the built-in fast overlay server instead of Replicate:
+
+- `VirtualTryOn:Mode` = `Local`
+- `VirtualTryOn:ServerScriptPath` = `Scripts\fast_overlay_server.py`
+- `VirtualTryOn:PythonExecutable` = `.venv-catvton\Scripts\python.exe`
+
+This mode is free and runs on the local machine, but it is a lightweight garment overlay, not the full generative try-on model. It is suitable for demos without Replicate credit. To let users access it from anywhere, deploy the web app plus a reachable backend server; a local-only Python server on your laptop is not public internet hosting.
 
 ## Best execution order
 
@@ -132,5 +150,5 @@ If the heavy model cannot run reliably on free infrastructure:
 2. Make Azure SQL work
 3. Publish the ASP.NET site
 4. Test the website without AI
-5. Add the AI API
-6. If AI is unstable, replace it with a lighter model
+5. Add the Replicate token
+6. Test virtual try-on from a mobile network

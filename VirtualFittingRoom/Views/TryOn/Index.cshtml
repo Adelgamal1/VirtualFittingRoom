@@ -1,0 +1,95 @@
+@{
+    ViewData["Title"] = "Try-On Studio";
+    var profileComplete = ViewBag.ProfileComplete as bool? ?? false;
+    var user = ViewBag.UserProfile as VirtualFittingRoom.Models.UserMeasurement;
+}
+
+@if (!profileComplete)
+{
+    <section class="fit-onboarding">
+        <div class="fit-onboarding-visual">
+            <div class="fit-room-title">Virtual Fitting Room</div>
+            <div class="fit-room-scene">
+                <div class="fit-garment fit-garment-suit"></div>
+                <div class="fit-avatar">
+                    <span></span>
+                </div>
+                <div class="fit-garment fit-garment-pants"></div>
+            </div>
+            <p>One scan, one time, all items</p>
+        </div>
+
+        <form asp-action="SaveProfile" method="post" class="fit-profile-form">
+            <div asp-validation-summary="All" class="text-danger small mb-2"></div>
+            <div class="fit-steps" aria-hidden="true">
+                <span class="is-active"></span>
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+
+            <span class="eyebrow">Personalization</span>
+            <h1>Tell us about you</h1>
+
+            <label class="profile-row">
+                <span>
+                    <strong>Gender</strong>
+                    <small>Body fit target</small>
+                </span>
+                <select name="Gender" class="form-select" required>
+                    <option value="">Select</option>
+                    <option value="Male" selected="@(user?.Gender == "Male")">Male</option>
+                    <option value="Female" selected="@(user?.Gender == "Female")">Female</option>
+                </select>
+            </label>
+
+            <label class="profile-row">
+                <span>
+                    <strong>Age</strong>
+                    <small>Years</small>
+                </span>
+                <input name="Age" type="number" class="form-control" min="1" max="110" value="@(user?.Age > 0 ? user.Age : 26)" required />
+            </label>
+
+            <label class="profile-row">
+                <span>
+                    <strong>Height</strong>
+                    <small>Centimeters</small>
+                </span>
+                <input name="Height" type="number" class="form-control" min="80" max="240" step="0.1" value="@(user?.Height > 0 ? user.Height : 175)" required />
+            </label>
+
+            <label class="profile-row">
+                <span>
+                    <strong>Weight</strong>
+                    <small>Kilograms</small>
+                </span>
+                <input name="Weight" type="number" class="form-control" min="20" max="250" step="0.1" value="@(user?.Weight > 0 ? user.Weight : 70)" required />
+            </label>
+
+            <button type="submit" class="btn btn-brand w-100">Next</button>
+        </form>
+    </section>
+}
+else
+{
+    <section class="studio-intro">
+        <div>
+            <span class="eyebrow">Try-on studio</span>
+            <h1>Build your fitting session</h1>
+            <p>Choose a live camera session, upload files, or paste an image link for clothes from any store.</p>
+        </div>
+        <form asp-action="SaveProfile" method="post" class="profile-mini">
+            <input type="hidden" name="Gender" value="@user?.Gender" />
+            <input type="hidden" name="Age" value="@user?.Age" />
+            <input type="hidden" name="Height" value="@user?.Height" />
+            <input type="hidden" name="Weight" value="@user?.Weight" />
+            <span>@user?.Gender</span>
+            <span>@user?.Age yrs</span>
+            <span>@user?.Height cm</span>
+            <span>@user?.Weight kg</span>
+        </form>
+    </section>
+
+<partial name="_TryOnStudio" />
+}

@@ -72,9 +72,14 @@ namespace VirtualFittingRoom.Services
 
         private void StartServerProcess()
         {
-            var workingDirectory = !string.IsNullOrWhiteSpace(_options.WorkingDirectory)
+            var configuredWorkingDirectory = !string.IsNullOrWhiteSpace(_options.WorkingDirectory)
                 ? _options.WorkingDirectory
                 : Path.GetDirectoryName(_options.ServerScriptPath)!;
+
+            var projectRoot = ExtractArgumentValue("--project-root", configuredWorkingDirectory);
+            var workingDirectory = Directory.Exists(projectRoot)
+                ? projectRoot
+                : configuredWorkingDirectory;
 
             Directory.CreateDirectory(workingDirectory);
 
@@ -86,7 +91,7 @@ namespace VirtualFittingRoom.Services
                 Quote(_options.ServerScriptPath),
                 "--host", Quote(host),
                 "--port", port.ToString(),
-                "--project-root", Quote(_options.WorkingDirectory),
+                "--project-root", Quote(projectRoot),
                 "--base-model-path", Quote(ExtractArgumentValue("--base-model-path")),
                 "--resume-path", Quote(ExtractArgumentValue("--resume-path")),
                 "--attn-version", Quote(ExtractArgumentValue("--attn-version", "mix")));

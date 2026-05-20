@@ -1,0 +1,110 @@
+@{
+    ViewData["Title"] = "Upload Try-On";
+}
+
+<section class="upload-workspace">
+    <header class="upload-header">
+        <div>
+            <span class="eyebrow">AI File Try-On</span>
+            <h1>Upload model and clothing</h1>
+            <p>This page handles uploaded model and clothing images separately from live camera.</p>
+        </div>
+        <a class="btn btn-ghost" asp-controller="TryOn" asp-action="History">
+            <i class="bi bi-clock-history"></i>
+            History
+        </a>
+    </header>
+
+    <form asp-controller="TryOn"
+          asp-action="StartUploadSession"
+          method="post"
+          enctype="multipart/form-data"
+          class="upload-form"
+          data-upload-form>
+        <div asp-validation-summary="All" class="text-danger small"></div>
+        <input type="hidden" name="modelImageData" data-upload-model-capture />
+
+        <div class="upload-grid">
+            <label class="upload-drop">
+                <input type="file" name="modelImageFile" accept="image/*" data-upload-preview-input="model" />
+                <span class="upload-drop-icon"><i class="bi bi-person-square"></i></span>
+                <strong>Model image</strong>
+                <small>Upload a clear full-body or half-body photo, or capture one below.</small>
+                <img alt="Model preview" class="upload-preview d-none" data-upload-preview="model" />
+            </label>
+
+            <div class="upload-drop">
+                <input type="file" name="garmentImageFile" accept="image/*" class="upload-hidden-input" data-upload-preview-input="garment" data-upload-garment-file />
+                <span class="upload-drop-icon"><i class="bi bi-bag"></i></span>
+                <strong>Clothing image</strong>
+                <small>Upload a front-facing clothing image from your device.</small>
+                <button type="button" class="btn btn-ghost upload-file-button" data-upload-garment-file-open>
+                    <i class="bi bi-folder2-open"></i>
+                    Upload Clothing
+                </button>
+                <img alt="Clothing preview" class="upload-preview d-none" data-upload-preview="garment" />
+            </div>
+        </div>
+
+        <div class="upload-camera-tools">
+            <button type="button" class="btn btn-ghost" data-upload-camera-open>
+                <i class="bi bi-camera-video"></i>
+                Capture model photo
+            </button>
+            <div class="upload-camera-panel d-none" data-upload-camera-panel>
+                <div class="upload-camera-frame">
+                    <video autoplay playsinline muted data-upload-camera-feed></video>
+                    <canvas data-upload-camera-canvas></canvas>
+                </div>
+                <div class="upload-camera-actions">
+                    <button type="button" class="btn btn-brand" data-upload-camera-capture>
+                        <i class="bi bi-camera"></i>
+                        Use Photo
+                    </button>
+                    <button type="button" class="btn btn-ghost" data-upload-camera-close>
+                        <i class="bi bi-x-lg"></i>
+                        Close Camera
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="upload-options">
+            <label>
+                <span>Clothing type</span>
+                <select name="ClothingType" class="form-select" data-upload-clothing-category required>
+                    <option value="">Select category</option>
+                    <option value="T-Shirt">T-Shirt</option>
+                    <option value="Shirt">Shirt</option>
+                    <option value="Hoodie">Hoodie</option>
+                    <option value="Jacket">Jacket</option>
+                    <option value="Dress">Dress</option>
+                    <option value="Pants">Pants</option>
+                    <option value="Shorts">Shorts</option>
+                    <option value="Galabeya">Galabeya</option>
+                </select>
+            </label>
+
+            <label>
+                <span>Fitting area</span>
+                <select name="GarmentArea" class="form-select" data-upload-garment-area required>
+                    <option value="">Select area</option>
+                    <option value="upper">Upper</option>
+                    <option value="lower">Lower</option>
+                    <option value="overall">Overall</option>
+                </select>
+            </label>
+        </div>
+
+        <div class="upload-actions">
+            <a class="btn btn-ghost" asp-controller="TryOn" asp-action="Index">
+                <i class="bi bi-camera-video"></i>
+                Back to live
+            </a>
+            <button type="submit" class="btn btn-brand" data-upload-submit>
+                <i class="bi bi-stars"></i>
+                Generate Try-On
+            </button>
+        </div>
+    </form>
+</section>

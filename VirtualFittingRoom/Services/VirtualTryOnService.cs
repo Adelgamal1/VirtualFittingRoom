@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using VirtualFittingRoom.Models;
@@ -30,17 +32,66 @@ namespace VirtualFittingRoom.Services
         {
             try
             {
+                var normalizedGarmentArea = NormalizeGarmentArea(garmentArea);
+                var localMode = IsLocalMode();
+                personImage = ResizeImageForInference(personImage, localMode ? 560 : 900, 76);
+                clothingImage = ResizeImageForInference(clothingImage, localMode ? 420 : 700, 76);
+
                 return IsApiMode()
-                    ? await RunAgainstApiAsync(personImage, clothingImage, garmentArea, cancellationToken)
+                    ? await RunAgainstApiAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken)
                     : IsReplicateMode()
-                    ? await RunAgainstReplicateAsync(personImage, clothingImage, garmentArea, cancellationToken)
+                    ? await RunAgainstReplicateAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken)
                     : IsHuggingFaceMode()
-                    ? await RunAgainstHuggingFaceSpaceAsync(personImage, clothingImage, garmentArea, cancellationToken)
-                    : await RunAgainstLocalServerAsync(personImage, clothingImage, garmentArea, cancellationToken);
+                    ? await RunAgainstHuggingFaceSpaceAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken)
+                    : await RunAgainstLocalServerAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken);
             }
             catch (Exception ex)
             {
-                return (false, null, $"AI inference failed: {ex.Message}");
+                return (false, null, BuildInferenceExceptionMessage(ex));
+            }
+        }
+
+        public async Task<(bool Success, byte[]? OutputBytes, string? Error)> RunHuggingFaceAsync(
+            byte[] personImage,
+            byte[] clothingImage,
+            string garmentArea,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var normalizedGarmentArea = NormalizeGarmentArea(garmentArea);
+                personImage = ResizeImageForInference(personImage, 900, 84);
+                clothingImage = ResizeImageForInference(clothingImage, 700, 84);
+
+                return await RunAgainstHuggingFaceSpaceAsync(
+                    personImage,
+                    clothingImage,
+                    normalizedGarmentArea,
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return (false, null, BuildInferenceExceptionMessage(ex));
+            }
+        }
+
+        public async Task<(bool Success, byte[]? OutputBytes, string? Error)> RunApiAsync(
+            byte[] personImage,
+            byte[] clothingImage,
+            string garmentArea,
+            string apiUrl,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var normalizedGarmentArea = NormalizeGarmentArea(garmentArea);
+                personImage = ResizeImageForInference(personImage, 900, 84);
+                clothingImage = ResizeImageForInference(clothingImage, 700, 84);
+                return await RunAgainstApiAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken, apiUrl);
+            }
+            catch (Exception ex)
+            {
+                return (false, null, BuildInferenceExceptionMessage(ex));
             }
         }
 
@@ -54,6 +105,11 @@ namespace VirtualFittingRoom.Services
             string.Equals(_options.Mode, "HuggingFace", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(_options.Mode, "HuggingFaceSpace", StringComparison.OrdinalIgnoreCase);
 
+        private bool IsLocalMode() =>
+            !IsApiMode() &&
+            !IsReplicateMode() &&
+            !IsHuggingFaceMode();
+
         private async Task<(bool Success, byte[]? OutputBytes, string? Error)> RunAgainstHuggingFaceSpaceAsync(
             byte[] personImage,
             byte[] clothingImage,
@@ -63,6 +119,13 @@ namespace VirtualFittingRoom.Services
             if (string.IsNullOrWhiteSpace(_options.HuggingFaceSpaceUrl))
             {
                 return (false, null, "VirtualTryOn:HuggingFaceSpaceUrl is not configured.");
+            }
+
+            if (_options.HuggingFaceSpaceUrl.Contains("YOUR_USERNAME", StringComparison.OrdinalIgnoreCase) ||
+                _options.HuggingFaceSpaceUrl.Contains("YOUR_SPACE_NAME", StringComparison.OrdinalIgnoreCase) ||
+                _options.HuggingFaceSpaceUrl.Contains("yisol-idm-vton", StringComparison.OrdinalIgnoreCase))
+            {
+                return (false, null, "Hugging Face Space URL is not configured. Create your own Space from VirtualFittingRoom/hf_space, then set VirtualTryOn:HuggingFaceSpaceUrl to its stable .hf.space URL.");
             }
 
             using var client = _httpClientFactory.CreateClient();
@@ -107,7 +170,7 @@ namespace VirtualFittingRoom.Services
             var submitJson = await submitResponse.Content.ReadAsStringAsync(cancellationToken);
             if (!submitResponse.IsSuccessStatusCode)
             {
-                return (false, null, $"Hugging Face Space returned HTTP {(int)submitResponse.StatusCode}: {submitJson}");
+                return (false, null, BuildHuggingFaceHttpError("submit the try-on request", (int)submitResponse.StatusCode, submitJson, baseUrl));
             }
 
             var eventId = ReadJsonString(submitJson, "event_id");
@@ -123,7 +186,7 @@ namespace VirtualFittingRoom.Services
             var eventStream = await resultResponse.Content.ReadAsStringAsync(cancellationToken);
             if (!resultResponse.IsSuccessStatusCode)
             {
-                return (false, null, $"Hugging Face queue returned HTTP {(int)resultResponse.StatusCode}: {eventStream}");
+                return (false, null, BuildHuggingFaceHttpError("read the try-on result", (int)resultResponse.StatusCode, eventStream, baseUrl));
             }
 
             var outputUrl = ExtractFirstGradioOutputUrl(eventStream, baseUrl);
@@ -232,11 +295,23 @@ namespace VirtualFittingRoom.Services
             byte[] personImage,
             byte[] clothingImage,
             string garmentArea,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? apiUrlOverride = null)
         {
-            if (string.IsNullOrWhiteSpace(_options.ApiUrl))
+            var apiUrl = string.IsNullOrWhiteSpace(apiUrlOverride)
+                ? _options.ApiUrl?.Trim()
+                : apiUrlOverride.Trim();
+
+            if (string.IsNullOrWhiteSpace(apiUrl))
             {
-                return (false, null, "VirtualTryOn:ApiUrl is not configured yet in appsettings.json.");
+                return (false, null, "Colab API URL is missing. Paste the URL ending with /tryon in the Upload page.");
+            }
+
+            if (apiUrl.Contains("PUT-YOUR-COLAB-TUNNEL-HERE", StringComparison.OrdinalIgnoreCase) ||
+                apiUrl.Contains("PUT_YOUR_TRYON_API_URL_HERE", StringComparison.OrdinalIgnoreCase) ||
+                apiUrl.Contains("PASTE_", StringComparison.OrdinalIgnoreCase))
+            {
+                return (false, null, "Colab API URL is still the placeholder. Run the Colab notebook, copy the printed URL ending with /tryon, and paste it in the Upload page.");
             }
 
             using var client = _httpClientFactory.CreateClient();
@@ -247,7 +322,8 @@ namespace VirtualFittingRoom.Services
             content.Add(CreateImageContent(clothingImage, "cloth.png"), _options.ApiClothingFieldName, "cloth.png");
             content.Add(new StringContent(garmentArea), _options.ApiCategoryFieldName);
 
-            if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+            if (!string.IsNullOrWhiteSpace(_options.ApiKey) &&
+                !_options.ApiKey.StartsWith("PUT_", StringComparison.OrdinalIgnoreCase))
             {
                 if (string.Equals(_options.ApiKeyHeader, "Authorization", StringComparison.OrdinalIgnoreCase))
                 {
@@ -260,7 +336,7 @@ namespace VirtualFittingRoom.Services
                 }
             }
 
-            using var response = await client.PostAsync(_options.ApiUrl, content, cancellationToken);
+            using var response = await client.PostAsync(apiUrl, content, cancellationToken);
             var responseBytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -331,46 +407,82 @@ namespace VirtualFittingRoom.Services
                 category = garmentArea
             };
 
-            using var response = await client.PostAsJsonAsync(
-                $"{_serverManager.ServerUrl}/tryon",
-                request,
-                cancellationToken);
-
+            using var response = await PostLocalTryOnAsync(client, request, cancellationToken);
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
-            using var document = JsonDocument.Parse(json);
-
-            if (!response.IsSuccessStatusCode)
+            if (string.IsNullOrWhiteSpace(json))
             {
-                var error = document.RootElement.TryGetProperty("error", out var errorNode)
-                    ? errorNode.GetString()
-                    : $"Local AI server returned HTTP {(int)response.StatusCode}.";
-
-                return (false, null, $"AI inference failed: {error}");
+                return (false, null, $"AI inference failed: Local AI server returned an empty response from {_serverManager.ServerUrl}/tryon.");
             }
 
-            if (!document.RootElement.TryGetProperty("outputImageBase64", out var outputNode))
+            JsonDocument document;
+            try
             {
-                return (false, null, "AI inference completed but no output image was returned.");
+                document = JsonDocument.Parse(json);
+            }
+            catch (JsonException ex)
+            {
+                return (false, null, $"AI inference failed: Local AI server returned invalid JSON: {ex.Message}. Raw response: {TrimForError(json)}");
             }
 
-            var outputBase64 = outputNode.GetString();
-            if (string.IsNullOrWhiteSpace(outputBase64))
+            using (document)
             {
-                return (false, null, "AI inference completed but returned an empty image.");
-            }
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error = document.RootElement.TryGetProperty("error", out var errorNode)
+                        ? errorNode.GetString()
+                        : $"Local AI server returned HTTP {(int)response.StatusCode}.";
 
-            return (true, Convert.FromBase64String(outputBase64), null);
+                    return (false, null, $"AI inference failed: {error}");
+                }
+
+                if (!document.RootElement.TryGetProperty("outputImageBase64", out var outputNode))
+                {
+                    return (false, null, "AI inference completed but no output image was returned.");
+                }
+
+                var outputBase64 = outputNode.GetString();
+                if (string.IsNullOrWhiteSpace(outputBase64))
+                {
+                    return (false, null, "AI inference completed but returned an empty image.");
+                }
+
+                return (true, Convert.FromBase64String(outputBase64), null);
+            }
         }
+
+        private async Task<HttpResponseMessage> PostLocalTryOnAsync(
+            HttpClient client,
+            object request,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                using var content = CreateLocalJsonContent(request);
+                return await client.PostAsync($"{_serverManager.ServerUrl}/tryon", content, cancellationToken);
+            }
+            catch (HttpRequestException)
+            {
+                await Task.Delay(700, cancellationToken);
+                await _serverManager.EnsureServerReadyAsync(cancellationToken);
+                using var content = CreateLocalJsonContent(request);
+                return await client.PostAsync($"{_serverManager.ServerUrl}/tryon", content, cancellationToken);
+            }
+            catch (IOException)
+            {
+                await Task.Delay(700, cancellationToken);
+                await _serverManager.EnsureServerReadyAsync(cancellationToken);
+                using var content = CreateLocalJsonContent(request);
+                return await client.PostAsync($"{_serverManager.ServerUrl}/tryon", content, cancellationToken);
+            }
+        }
+
+        private static StringContent CreateLocalJsonContent(object request) =>
+            new(JsonSerializer.Serialize(request), System.Text.Encoding.UTF8, "application/json");
 
         private static ByteArrayContent CreateImageContent(byte[] bytes, string fileName)
         {
             var content = new ByteArrayContent(bytes);
             content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-            content.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
-            {
-                FileName = fileName,
-                Name = fileName
-            };
             return content;
         }
 
@@ -404,16 +516,20 @@ namespace VirtualFittingRoom.Services
 
         private string BuildGarmentDescription(string garmentArea)
         {
-            if (!string.IsNullOrWhiteSpace(_options.HuggingFaceGarmentDescription))
+            var normalizedArea = NormalizeGarmentArea(garmentArea);
+            var configuredDescription = _options.HuggingFaceGarmentDescription?.Trim();
+
+            if (!string.IsNullOrWhiteSpace(configuredDescription) &&
+                !string.Equals(configuredDescription, "A clothing garment", StringComparison.OrdinalIgnoreCase))
             {
-                return _options.HuggingFaceGarmentDescription;
+                return configuredDescription;
             }
 
-            return NormalizeGarmentArea(garmentArea) switch
+            return normalizedArea switch
             {
-                "lower" => "Lower body clothing garment",
-                "overall" => "Full body clothing garment",
-                _ => "Upper body clothing garment"
+                "lower" => "pants or shorts",
+                "overall" => "galabeya, dress, or full body outfit",
+                _ => "upper body garment"
             };
         }
 
@@ -431,7 +547,7 @@ namespace VirtualFittingRoom.Services
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                throw new InvalidOperationException($"Hugging Face upload returned HTTP {(int)response.StatusCode}: {json}");
+                throw new InvalidOperationException(BuildHuggingFaceHttpError("upload the images", (int)response.StatusCode, json, baseUrl));
             }
 
             using var document = JsonDocument.Parse(json);
@@ -552,6 +668,50 @@ namespace VirtualFittingRoom.Services
             return "Hugging Face Space completed but did not return an output image. Raw response: " + raw;
         }
 
+        private static string BuildHuggingFaceHttpError(string action, int statusCode, string responseBody, string baseUrl)
+        {
+            var raw = TrimForError(responseBody);
+            var spaceUrl = BuildHuggingFaceSpacePageUrl(baseUrl);
+
+            if (statusCode == 503 || responseBody.Contains("space is in error", StringComparison.OrdinalIgnoreCase))
+            {
+                if (baseUrl.Contains("yisol-idm-vton", StringComparison.OrdinalIgnoreCase))
+                {
+                    return $"The configured Hugging Face Space is the old public demo ({spaceUrl}), and Hugging Face says it is currently in error. Replace VirtualTryOn:HuggingFaceSpaceUrl with your own duplicated Space URL, then try again. Raw response: {raw}";
+                }
+
+                return $"The public Hugging Face try-on Space is currently unavailable while trying to {action}. Hugging Face reports that the Space is in error. Check {spaceUrl} or switch VirtualTryOn:Mode to another backend. Raw response: {raw}";
+            }
+
+            return $"Hugging Face could not {action}. HTTP {statusCode}. Raw response: {raw}";
+        }
+
+        private static string BuildHuggingFaceSpacePageUrl(string baseUrl)
+        {
+            if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
+            {
+                return "the Hugging Face Space page";
+            }
+
+            var host = uri.Host;
+            const string suffix = ".hf.space";
+            if (!host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return "the Hugging Face Space page";
+            }
+
+            var spaceHost = host[..^suffix.Length];
+            var separatorIndex = spaceHost.IndexOf('-');
+            if (separatorIndex <= 0 || separatorIndex >= spaceHost.Length - 1)
+            {
+                return "the Hugging Face Space page";
+            }
+
+            var owner = spaceHost[..separatorIndex];
+            var spaceName = spaceHost[(separatorIndex + 1)..];
+            return $"https://huggingface.co/spaces/{owner}/{spaceName}";
+        }
+
         private static string? FindFirstFileUrl(JsonElement element, string baseUrl)
         {
             if (element.ValueKind == JsonValueKind.Object)
@@ -637,14 +797,70 @@ namespace VirtualFittingRoom.Services
         private static string ToDataUrl(byte[] imageBytes) =>
             $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}";
 
+        private static byte[] ResizeImageForInference(byte[] imageBytes, int maxSide, long quality)
+        {
+            try
+            {
+                using var input = new MemoryStream(imageBytes);
+                using var source = Image.FromStream(input);
+                var largestSide = Math.Max(source.Width, source.Height);
+                if (largestSide <= maxSide && imageBytes.Length <= 1_500_000)
+                {
+                    return imageBytes;
+                }
+
+                var scale = Math.Min(1.0, maxSide / (double)largestSide);
+                var targetWidth = Math.Max(1, (int)Math.Round(source.Width * scale));
+                var targetHeight = Math.Max(1, (int)Math.Round(source.Height * scale));
+
+                using var bitmap = new Bitmap(targetWidth, targetHeight);
+                using (var graphics = Graphics.FromImage(bitmap))
+                {
+                    graphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                    graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                    graphics.DrawImage(source, 0, 0, targetWidth, targetHeight);
+                }
+
+                using var output = new MemoryStream();
+                var encoder = ImageCodecInfo.GetImageEncoders()
+                    .FirstOrDefault(codec => string.Equals(codec.MimeType, "image/jpeg", StringComparison.OrdinalIgnoreCase));
+
+                if (encoder == null)
+                {
+                    bitmap.Save(output, ImageFormat.Jpeg);
+                }
+                else
+                {
+                    using var encoderParameters = new EncoderParameters(1);
+                    encoderParameters.Param[0] = new EncoderParameter(Encoder.Quality, quality);
+                    bitmap.Save(output, encoder, encoderParameters);
+                }
+
+                return output.ToArray();
+            }
+            catch
+            {
+                return imageBytes;
+            }
+        }
+
         private static string NormalizeGarmentArea(string garmentArea)
         {
             return garmentArea.Trim().ToLowerInvariant() switch
             {
                 "upper_body" => "upper",
+                "top" => "upper",
                 "lower_body" => "lower",
+                "pants" => "lower",
+                "trousers" => "lower",
+                "short" => "lower",
+                "shorts" => "lower",
                 "dress" => "overall",
                 "dresses" => "overall",
+                "galabeya" => "overall",
+                "galabiya" => "overall",
+                "jellabiya" => "overall",
                 "overall" => "overall",
                 "lower" => "lower",
                 _ => "upper"
@@ -690,6 +906,23 @@ namespace VirtualFittingRoom.Services
             {
                 return "Unable to decode API response.";
             }
+        }
+
+        private static string BuildInferenceExceptionMessage(Exception exception)
+        {
+            var message = exception.Message;
+            if (exception.InnerException != null &&
+                !string.Equals(exception.InnerException.Message, message, StringComparison.Ordinal))
+            {
+                message += $" Inner error: {exception.InnerException.Message}";
+            }
+
+            if (message.Contains("copying content to a stream", StringComparison.OrdinalIgnoreCase))
+            {
+                message += " This usually means the local AI server closed the connection while ASP.NET was sending the images. Check that the Python inference server is still running and that the selected images are valid.";
+            }
+
+            return $"AI inference failed: {message}";
         }
 
         private sealed class ReplicatePrediction

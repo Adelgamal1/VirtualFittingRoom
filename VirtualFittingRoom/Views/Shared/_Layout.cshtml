@@ -23,36 +23,18 @@
 
     <div class="site-bg"></div>
 
-    <nav class="navbar site-navbar">
-        <div class="container app-shell nav-inner">
-            <a asp-controller="Home" asp-action="Index" class="brand-mark text-decoration-none">
-                <span class="brand-dot"></span>
-                <span>Virtual Fitting Room</span>
-            </a>
-
-            <div class="nav-links">
-                @if (isLoggedIn)
-                {
-                    <a asp-controller="TryOn" asp-action="History" class="nav-pill filled">History</a>
-                }
-                else if (isSignupPage)
-                {
-                    <a asp-controller="Account" asp-action="Login" class="nav-pill filled">Sign In</a>
-                }
-                else if (!isLoginPage)
-                {
-                    <a asp-controller="Account" asp-action="Login" class="nav-pill">Sign In</a>
-                    <a asp-controller="Registration" asp-action="Index" class="nav-pill filled">Sign Up</a>
-                }
-            </div>
+    <header class="site-title-header">
+        <div class="container app-shell">
+            <h1>Virtual Fitting Room</h1>
         </div>
-    </nav>
+    </header>
 
     <main class="container app-shell mt-4">
         @RenderBody()
     </main>
 
-    <script src="~/js/site.js"></script>
+    <script src="~/js/live-camera/live-fit-ai.js" asp-append-version="true"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
     @RenderSection("Scripts", required: false)
 </body>
 </html>

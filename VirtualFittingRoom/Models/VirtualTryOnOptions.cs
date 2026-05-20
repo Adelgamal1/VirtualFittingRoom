@@ -27,7 +27,7 @@ namespace VirtualFittingRoom.Models
         public string ReplicateOutputFormat { get; set; } = "png";
         public int ReplicateWaitSeconds { get; set; } = 60;
         public int ReplicatePollSeconds { get; set; } = 3;
-        public string HuggingFaceSpaceUrl { get; set; } = "https://yisol-idm-vton.hf.space";
+        public string HuggingFaceSpaceUrl { get; set; } = "https://YOUR_USERNAME-YOUR_SPACE_NAME.hf.space";
         public string HuggingFaceApiName { get; set; } = "tryon";
         public string HuggingFaceToken { get; set; } = string.Empty;
         public int HuggingFaceDenoiseSteps { get; set; } = 30;

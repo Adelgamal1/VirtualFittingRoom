@@ -13,6 +13,11 @@ from PIL import Image, ImageDraw
 
 
 def find_project_bundle(project_root: Path) -> Path:
+    if (project_root / "model" / "pipeline.py").exists():
+        return project_root
+    if (project_root / "pipeline.py").exists() and project_root.name == "model":
+        return project_root.parent
+
     for candidate in project_root.iterdir():
         if candidate.is_dir() and (candidate / "model" / "pipeline.py").exists():
             return candidate
@@ -190,8 +195,10 @@ class TryOnHandler(BaseHTTPRequestHandler):
             return self._write_json(404, {"error": "Not found"})
 
         try:
-            content_length = int(self.headers.get("Content-Length", "0"))
-            raw_body = self.rfile.read(content_length)
+            raw_body = self._read_request_body()
+            if not raw_body:
+                return self._write_json(400, {"error": "Empty request body."})
+
             payload = json.loads(raw_body.decode("utf-8"))
 
             person_image = base64.b64decode(payload["personImageBase64"])
@@ -204,6 +211,8 @@ class TryOnHandler(BaseHTTPRequestHandler):
             return self._write_json(200, {
                 "outputImageBase64": base64.b64encode(output_bytes).decode("utf-8")
             })
+        except json.JSONDecodeError as ex:
+            return self._write_json(400, {"error": f"Invalid JSON body: {ex}"})
         except Exception as ex:
             return self._write_json(500, {"error": str(ex)})
 
@@ -217,6 +226,24 @@ class TryOnHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _read_request_body(self) -> bytes:
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            chunks = []
+            while True:
+                line = self.rfile.readline().strip()
+                if not line:
+                    continue
+                chunk_size = int(line, 16)
+                if chunk_size == 0:
+                    self.rfile.readline()
+                    break
+                chunks.append(self.rfile.read(chunk_size))
+                self.rfile.readline()
+            return b"".join(chunks)
+
+        content_length = int(self.headers.get("Content-Length", "0"))
+        return self.rfile.read(content_length) if content_length > 0 else b""
 
 
 def main():

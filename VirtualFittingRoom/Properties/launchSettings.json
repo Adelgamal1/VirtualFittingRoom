@@ -14,14 +14,20 @@
       "launchBrowser": true,
       "applicationUrl": "http://localhost:5001",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "VirtualTryOn__Mode": "HuggingFace",
+        "VirtualTryOn__HuggingFaceSpaceUrl": "https://YOUR_USERNAME-YOUR_SPACE_NAME.hf.space",
+        "VirtualTryOn__HuggingFaceApiName": "tryon"
       }
     },
     "IIS Express": {
       "commandName": "IISExpress",
       "launchBrowser": true,
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "VirtualTryOn__Mode": "HuggingFace",
+        "VirtualTryOn__HuggingFaceSpaceUrl": "https://YOUR_USERNAME-YOUR_SPACE_NAME.hf.space",
+        "VirtualTryOn__HuggingFaceApiName": "tryon"
       }
     }
   }
