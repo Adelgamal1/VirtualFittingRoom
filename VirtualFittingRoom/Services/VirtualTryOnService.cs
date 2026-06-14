@@ -658,7 +658,7 @@ namespace VirtualFittingRoom.Services
             {
                 return normalizedType switch
                 {
-                    "t-shirt" => $"{viewText} t-shirt worn naturally on the body, round collar placed below the neck on the collarbone, shoulder seam to shoulder seam, sleeves wrapped on arms, not pasted as a flat sticker",
+                    "t-shirt" => $"{viewText} t-shirt worn naturally on the body with realistic fabric drape, round collar following the collarbone below the neck, shoulder seam to shoulder seam, sleeves wrapped on arms, keep the face and neck unchanged, not pasted as a flat sticker",
                     "tank-top" => $"{viewText} sleeveless tank top aligned {neckText}, shoulder strap to shoulder, chest panel to torso",
                     "shirt" => $"{viewText} shirt aligned {neckText}, shoulder to shoulder, elbow to elbow",
                     "chemise" => $"{viewText} chemise blouse aligned {neckText}, shoulder to shoulder, sleeve to arm",

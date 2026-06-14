@@ -245,7 +245,7 @@ namespace VirtualFittingRoom.Services
                     "chemise" => 1.48,
                     "blouse" => 1.42,
                     "shirt" => 1.42,
-                    "t-shirt" => 1.78,
+                    "t-shirt" => 1.70,
                     "hoodie" or "jacket" => 1.58,
                     _ => 1.50
                 };
@@ -254,7 +254,7 @@ namespace VirtualFittingRoom.Services
                 var height = category switch
                 {
                     "jersey" => Math.Max(1, (int)Math.Round(torsoHeight * 1.28)),
-                    "t-shirt" => Math.Max(1, (int)Math.Round(torsoHeight * 1.04)),
+                    "t-shirt" => Math.Max(1, (int)Math.Round(torsoHeight * 0.99)),
                     _ => Math.Max(1, (int)Math.Round(reference.Height * placement.Height))
                 };
                 var collarRatio = category switch
@@ -267,7 +267,7 @@ namespace VirtualFittingRoom.Services
                 };
                 var topLift = category switch
                 {
-                    "t-shirt" => shoulderWidth * 0.14,
+                    "t-shirt" => shoulderWidth * 0.16,
                     "jersey" => shoulderWidth * 0.08,
                     _ => shoulderWidth * 0.06
                 };
@@ -476,14 +476,14 @@ namespace VirtualFittingRoom.Services
             var centerX = body.CenterX;
             var upperLift = category switch
             {
-                "t-shirt" => shoulderWidth * 0.14,
+                "t-shirt" => shoulderWidth * 0.16,
                 "jersey" => shoulderWidth * 0.08,
                 _ => shoulderWidth * 0.06
             };
             var collarY = Math.Clamp(body.CollarY - (int)Math.Round(upperLift), 0, person.Height - 1);
             var shoulderY = Math.Clamp(body.ShoulderY - (int)Math.Round(upperLift * 0.70), 0, person.Height - 1);
             var hemY = category == "t-shirt"
-                ? Math.Min(drawTarget.Bottom, body.WaistY + (int)Math.Round(shoulderWidth * 0.32))
+                ? Math.Min(drawTarget.Bottom, body.WaistY + (int)Math.Round(shoulderWidth * 0.20))
                 : Math.Min(drawTarget.Bottom, body.HipY + (int)Math.Round(shoulderWidth * 0.12));
             hemY = Math.Max(shoulderY + (int)Math.Round(shoulderWidth * 0.72), hemY);
             hemY = Math.Min(person.Height, hemY);
@@ -493,17 +493,17 @@ namespace VirtualFittingRoom.Services
                 "tank-top" => 0.08,
                 "jersey" => 0.26,
                 "hoodie" or "jacket" => 0.22,
-                _ => 0.22
+                _ => 0.20
             };
             var sleeveReach = category switch
             {
                 "tank-top" => 0.12,
                 "jersey" => 0.56,
                 "hoodie" or "jacket" => 0.48,
-                _ => 0.52
+                _ => 0.46
             };
-            var bottomHalf = Math.Max(shoulderWidth * (category == "t-shirt" ? 0.54 : 0.58), drawTarget.Width * 0.34);
-            var shoulderInset = shoulderWidth * (category == "t-shirt" ? 0.08f : 0.12f);
+            var bottomHalf = Math.Max(shoulderWidth * (category == "t-shirt" ? 0.49 : 0.58), drawTarget.Width * 0.31);
+            var shoulderInset = shoulderWidth * (category == "t-shirt" ? 0.06f : 0.12f);
             var leftOuter = Math.Max(drawTarget.Left, (float)body.ShoulderLeft - (shoulderWidth * (float)sleeveReach));
             var rightOuter = Math.Min(drawTarget.Right, (float)body.ShoulderRight + (shoulderWidth * (float)sleeveReach));
             var outerY = shoulderY + (shoulderWidth * (float)sleeveDrop);
@@ -527,10 +527,10 @@ namespace VirtualFittingRoom.Services
             upperPath.AddBezier(
                 body.ShoulderLeft - shoulderInset,
                 collarY,
-                centerX - (shoulderWidth * 0.20f),
-                collarY - (shoulderWidth * 0.08f),
-                centerX + (shoulderWidth * 0.20f),
-                collarY - (shoulderWidth * 0.08f),
+                centerX - (shoulderWidth * 0.22f),
+                collarY - (shoulderWidth * 0.06f),
+                centerX + (shoulderWidth * 0.22f),
+                collarY - (shoulderWidth * 0.06f),
                 body.ShoulderRight + shoulderInset,
                 collarY);
             upperPath.AddBezier(
@@ -571,9 +571,12 @@ namespace VirtualFittingRoom.Services
                 outerY);
             upperPath.CloseFigure();
 
-            var neckCenterY = Math.Min(collarY + (int)Math.Round(shoulderWidth * 0.035), body.NeckY + (int)Math.Round(shoulderWidth * 0.03));
-            var neckWidth = Math.Max(22, shoulderWidth * (category == "tank-top" ? 0.28f : 0.20f));
-            var neckHeight = Math.Max(11, shoulderWidth * (category == "tank-top" ? 0.12f : 0.09f));
+            var neckCenterY = Math.Clamp(
+                collarY + (int)Math.Round(shoulderWidth * (category == "t-shirt" ? 0.055 : 0.035)),
+                0,
+                person.Height - 1);
+            var neckWidth = Math.Max(22, shoulderWidth * (category == "tank-top" ? 0.28f : 0.23f));
+            var neckHeight = Math.Max(11, shoulderWidth * (category == "tank-top" ? 0.12f : 0.105f));
             var neckRect = new RectangleF(
                 centerX - (neckWidth / 2f),
                 neckCenterY - (neckHeight * 0.50f),
@@ -581,7 +584,37 @@ namespace VirtualFittingRoom.Services
                 neckHeight);
 
             using var neckPath = new GraphicsPath();
-            neckPath.AddEllipse(neckRect);
+            if (category == "t-shirt")
+            {
+                var neckLeft = neckRect.Left;
+                var neckRight = neckRect.Right;
+                var neckTop = neckRect.Top + (neckRect.Height * 0.10f);
+                var neckBottom = neckRect.Bottom;
+                neckPath.StartFigure();
+                neckPath.AddBezier(
+                    neckLeft,
+                    neckTop + (neckRect.Height * 0.30f),
+                    centerX - (neckWidth * 0.42f),
+                    neckTop - (neckRect.Height * 0.10f),
+                    centerX + (neckWidth * 0.42f),
+                    neckTop - (neckRect.Height * 0.10f),
+                    neckRight,
+                    neckTop + (neckRect.Height * 0.30f));
+                neckPath.AddBezier(
+                    neckRight,
+                    neckTop + (neckRect.Height * 0.30f),
+                    centerX + (neckWidth * 0.34f),
+                    neckBottom,
+                    centerX - (neckWidth * 0.34f),
+                    neckBottom,
+                    neckLeft,
+                    neckTop + (neckRect.Height * 0.30f));
+                neckPath.CloseFigure();
+            }
+            else
+            {
+                neckPath.AddEllipse(neckRect);
+            }
 
             using var garmentLayer = new Bitmap(person.Width, person.Height, PixelFormat.Format32bppArgb);
             using (var layerGraphics = Graphics.FromImage(garmentLayer))
@@ -613,7 +646,11 @@ namespace VirtualFittingRoom.Services
             graphics.DrawImage(garmentLayer, 0, 0);
 
             var skinColor = EstimateSkinColor(person, centerX, Math.Max(0, body.NeckY - (int)Math.Round(shoulderWidth * 0.10)), shoulderWidth);
-            using (var neckBrush = new SolidBrush(skinColor))
+            using (var neckBrush = new LinearGradientBrush(
+                neckRect,
+                ShadeColor(skinColor, 1.08f),
+                ShadeColor(skinColor, 0.94f),
+                LinearGradientMode.Vertical))
             {
                 graphics.FillPath(neckBrush, neckPath);
             }
@@ -623,9 +660,9 @@ namespace VirtualFittingRoom.Services
             using var collarShadow = new Pen(Color.FromArgb(58, 0, 0, 0), Math.Max(2.2f, shoulderWidth * 0.028f));
             var collarArc = new RectangleF(
                 centerX - (neckWidth * 0.58f),
-                neckCenterY - (neckHeight * 0.55f),
+                neckCenterY - (neckHeight * 0.48f),
                 neckWidth * 1.16f,
-                neckHeight * 1.25f);
+                neckHeight * 1.18f);
             graphics.DrawArc(collarShadow, collarArc, 178, 184);
             graphics.DrawArc(collarPen, collarArc, 178, 184);
 
@@ -668,6 +705,15 @@ namespace VirtualFittingRoom.Services
             return count == 0
                 ? Color.FromArgb(150, 92, 62)
                 : Color.FromArgb((int)(r / count), (int)(g / count), (int)(b / count));
+        }
+
+        private static Color ShadeColor(Color color, float factor)
+        {
+            return Color.FromArgb(
+                color.A,
+                Math.Clamp((int)Math.Round(color.R * factor), 0, 255),
+                Math.Clamp((int)Math.Round(color.G * factor), 0, 255),
+                Math.Clamp((int)Math.Round(color.B * factor), 0, 255));
         }
 
         private static Color EstimateGarmentTrimColor(Bitmap garment)
