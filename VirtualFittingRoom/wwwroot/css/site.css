@@ -788,7 +788,7 @@ body:has(.auth-visual-shell) .site-title-header h1 {
 }
 
 .live-actions-split {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .live-action-btn {
@@ -813,6 +813,12 @@ body:has(.auth-visual-shell) .site-title-header h1 {
     color: #fff;
     background: linear-gradient(135deg, var(--navy), var(--navy-soft));
     box-shadow: 0 16px 32px rgba(17, 24, 39, 0.24);
+}
+
+.live-action-btn[data-live-ai-fit] {
+    color: #fff;
+    background: linear-gradient(135deg, #f97316, #dc2626);
+    box-shadow: 0 16px 32px rgba(249, 115, 22, 0.28);
 }
 
 .live-link-panel {
@@ -999,6 +1005,21 @@ body:has(.auth-visual-shell) .site-title-header h1 {
 
 .history-card-body {
     padding: 1.1rem;
+}
+
+.history-card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+}
+
+.history-card-actions form {
+    margin: 0;
+}
+
+.history-card-actions .btn {
+    width: 100%;
+    min-height: 42px;
 }
 
 .history-meta {
@@ -1861,6 +1882,8 @@ body:has(.mobile-studio-shell) .submit-row .btn-brand {
 }
 
 .preview-tile {
+    position: relative;
+    overflow: hidden;
     min-height: 210px;
     place-items: center;
 }
@@ -1871,6 +1894,15 @@ body:has(.mobile-studio-shell) .submit-row .btn-brand {
     object-fit: contain;
     border-radius: 16px;
     background: #eef2f7;
+}
+
+.pose-landmark-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 220px;
+    pointer-events: none;
+    z-index: 2;
 }
 
 .settings-stack label {
@@ -2127,6 +2159,19 @@ body:has(.public-live-shell) main.app-shell {
     display: none;
 }
 
+.upload-camera-countdown {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: clamp(4rem, 18vw, 8rem);
+    font-weight: 800;
+    background: rgba(5, 9, 20, 0.46);
+    text-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+}
+
 .upload-camera-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2211,6 +2256,16 @@ body:has(.public-live-shell) main.app-shell {
     object-fit: contain;
     padding: 0.75rem;
     background: #f8fafc;
+}
+
+.upload-pose-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    padding: 0.75rem;
+    pointer-events: none;
 }
 
 .upload-links label,
@@ -2315,6 +2370,18 @@ body:has(.public-live-shell) main.app-shell {
 .btn-ghost:focus {
     color: #0b1220;
     background: #eef2ff;
+}
+
+.btn-danger-soft {
+    color: #9f1239;
+    background: #fff1f2;
+    border: 1px solid #fecdd3;
+}
+
+.btn-danger-soft:hover,
+.btn-danger-soft:focus {
+    color: #ffffff;
+    background: #be123c;
 }
 
 .form-label {
@@ -2508,6 +2575,10 @@ body:has(.public-live-shell) main.app-shell {
 
     .live-actions {
         grid-template-columns: minmax(160px, 1fr);
+    }
+
+    .live-actions-split {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .live-garment-strip {

@@ -17,6 +17,8 @@ uses image upload.
 
 ## Required project structure
 
+Create the new Space here: https://huggingface.co/new-space
+
 Upload these folders/files into the Space repository root together with `app.py` and `requirements.txt`:
 
 - `model/`

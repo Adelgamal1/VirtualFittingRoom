@@ -50,27 +50,26 @@ namespace VirtualFittingRoom.Controllers
                 !string.Equals(user.Gender, "Unspecified", StringComparison.OrdinalIgnoreCase);
             ViewBag.UserProfile = user;
 
+            if (ViewBag.ProfileComplete)
+                return RedirectToAction(nameof(Upload));
+
             return View();
         }
 
         [HttpGet]
         public IActionResult Live(string? clothingImageUrl, string? clothingType, string? garmentArea)
         {
-            ViewBag.IsPublicLive = true;
-            ViewBag.InitialClothingUrl = clothingImageUrl?.Trim();
-            ViewBag.InitialClothingType = string.IsNullOrWhiteSpace(clothingType) ? "T-Shirt" : clothingType.Trim();
-            ViewBag.InitialGarmentArea = ResolveGarmentArea(clothingType, garmentArea) ?? "upper";
-
-            return View();
+            return RedirectToAction(nameof(Upload));
         }
 
         [HttpGet]
-        public IActionResult Upload()
+        public async Task<IActionResult> Upload()
         {
             int userId = HttpContext.Session.GetInt32("UserId") ?? 0;
             if (userId == 0)
                 return RedirectToAction("Login", "Account");
 
+            await PopulateUploadViewBagAsync(userId);
             return View();
         }
 
@@ -109,15 +108,18 @@ namespace VirtualFittingRoom.Controllers
             string? modelImageData,
             string? modelImageUrl,
             string? garmentImageUrl,
-            string? colabApiUrl,
+            string? Gender,
             string? ClothingType,
             string? GarmentArea,
+            string? GarmentView,
+            string? poseLandmarksData,
             CancellationToken cancellationToken = default)
         {
             int userId = HttpContext.Session.GetInt32("UserId") ?? 0;
             if (userId == 0)
                 return RedirectToAction("Login", "Account");
 
+            var targetBody = await ResolveTargetBodyAsync(userId, Gender, cancellationToken);
             var modelImage = !string.IsNullOrWhiteSpace(modelImageData)
                 ? ReadDataUrlImage(modelImageData, "Could not read the captured model photo.")
                 : await ReadImageInputAsync(
@@ -128,7 +130,7 @@ namespace VirtualFittingRoom.Controllers
             if (!modelImage.Success || modelImage.Bytes == null)
             {
                 ModelState.AddModelError("", modelImage.Error ?? "Could not read the model image.");
-                return View("Upload");
+                return await ReturnUploadViewAsync(userId);
             }
 
             var garmentImage = await ReadImageInputAsync(
@@ -139,14 +141,20 @@ namespace VirtualFittingRoom.Controllers
             if (!garmentImage.Success || garmentImage.Bytes == null)
             {
                 ModelState.AddModelError("", garmentImage.Error ?? "Could not read the clothing image.");
-                return View("Upload");
+                return await ReturnUploadViewAsync(userId);
             }
 
             GarmentArea = ResolveGarmentArea(ClothingType, GarmentArea);
             if (string.IsNullOrWhiteSpace(GarmentArea))
             {
                 ModelState.AddModelError("", "Please select the garment area.");
-                return View("Upload");
+                return await ReturnUploadViewAsync(userId);
+            }
+
+            if (!IsAllowedClothingForTarget(targetBody, ClothingType))
+            {
+                ModelState.AddModelError("", "Selected clothing category does not match the target body.");
+                return await ReturnUploadViewAsync(userId);
             }
 
             var aiResult = await _uploadTryOnService.RunAsync(
@@ -154,13 +162,14 @@ namespace VirtualFittingRoom.Controllers
                 garmentImage.Bytes,
                 GarmentArea,
                 ClothingType,
-                colabApiUrl,
+                GarmentView,
+                poseLandmarksData,
                 cancellationToken);
 
             if (!aiResult.Success || aiResult.OutputBytes == null)
             {
                 ModelState.AddModelError("", aiResult.Error ?? "Virtual try-on failed.");
-                return View("Upload");
+                return await ReturnUploadViewAsync(userId);
             }
 
             var userImage = new UserImage
@@ -188,6 +197,8 @@ namespace VirtualFittingRoom.Controllers
             string? Gender,
             string? ClothingType,
             string? GarmentArea,
+            string? GarmentView,
+            string? poseLandmarksData,
             CancellationToken cancellationToken = default
         )
         {
@@ -235,11 +246,18 @@ namespace VirtualFittingRoom.Controllers
                 return await ReturnTryOnIndexAsync(userId);
             }
 
+            var targetBody = await ResolveTargetBodyAsync(userId, Gender, cancellationToken);
             GarmentArea = ResolveGarmentArea(ClothingType, GarmentArea);
 
             if (string.IsNullOrWhiteSpace(GarmentArea))
             {
                 ModelState.AddModelError("", "Please select the garment area");
+                return await ReturnTryOnIndexAsync(userId);
+            }
+
+            if (!IsAllowedClothingForTarget(targetBody, ClothingType))
+            {
+                ModelState.AddModelError("", "Selected clothing category does not match the target body.");
                 return await ReturnTryOnIndexAsync(userId);
             }
 
@@ -272,6 +290,8 @@ namespace VirtualFittingRoom.Controllers
                 clothingBytes,
                 GarmentArea,
                 ClothingType,
+                GarmentView,
+                poseLandmarksData,
                 cancellationToken);
             if (!aiResult.Success || aiResult.OutputBytes == null)
             {
@@ -312,6 +332,19 @@ namespace VirtualFittingRoom.Controllers
             return View("Index");
         }
 
+        private async Task<IActionResult> ReturnUploadViewAsync(int userId)
+        {
+            await PopulateUploadViewBagAsync(userId);
+            return View("Upload");
+        }
+
+        private async Task PopulateUploadViewBagAsync(int userId)
+        {
+            ViewBag.UserProfile = await _context.UserMeasurements
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
         [HttpGet]
         public IActionResult Measure(int imageId)
         {
@@ -339,13 +372,29 @@ namespace VirtualFittingRoom.Controllers
             if (userId == 0)
                 return RedirectToAction("Login", "Account");
 
+            var allowedRatings = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Bad",
+                "Good",
+                "Very Good",
+                "Excellent"
+            };
+
+            if (!allowedRatings.Contains(Rating ?? string.Empty))
+            {
+                return BadRequest("Invalid rating.");
+            }
+
+            var normalizedRating = allowedRatings.First(r =>
+                string.Equals(r, Rating, StringComparison.OrdinalIgnoreCase));
+
             var image = _context.UserImages
                 .FirstOrDefault(i => i.Id == imageId && i.UserMeasurementId == userId);
 
             if (image == null)
                 return NotFound();
 
-            image.Rating = Rating;
+            image.Rating = normalizedRating;
             _context.SaveChanges();
 
             return RedirectToAction("History");
@@ -361,7 +410,12 @@ namespace VirtualFittingRoom.Controllers
             var images = _context.UserImages
                 .AsNoTracking()
                 .Where(i => i.UserMeasurementId == userId)
-                .OrderByDescending(i => i.CreatedAt)
+                .OrderByDescending(i =>
+                    i.Rating == "Excellent" ? 4 :
+                    i.Rating == "Very Good" ? 3 :
+                    i.Rating == "Good" ? 2 :
+                    i.Rating == "Bad" ? 1 : 0)
+                .ThenByDescending(i => i.CreatedAt)
                 .ToList();
 
             var historyItems = images.Select(img => new HistoryItemViewModel
@@ -394,20 +448,140 @@ namespace VirtualFittingRoom.Controllers
             return File(imageBytes, img.ImageType, $"fitting-session-{id}.png");
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken = default)
+        {
+            int userId = HttpContext.Session.GetInt32("UserId") ?? 0;
+            if (userId == 0)
+                return RedirectToAction("Login", "Account");
+
+            var img = await _context.UserImages
+                .FirstOrDefaultAsync(i => i.Id == id && i.UserMeasurementId == userId, cancellationToken);
+
+            if (img == null)
+                return NotFound();
+
+            _context.UserImages.Remove(img);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return RedirectToAction(nameof(History));
+        }
+
         private static string? ResolveGarmentArea(string? clothingType, string? garmentArea)
         {
-            var normalizedClothingType = clothingType?.Trim().ToLowerInvariant();
+            var normalizedClothingType = NormalizeClothingType(clothingType);
             return normalizedClothingType switch
             {
                 "pants" => "lower",
                 "shorts" => "lower",
                 "short" => "lower",
                 "dress" => "overall",
+                "jumpsuit" => "overall",
+                "overall" => "overall",
+                "romper" => "overall",
+                "salopette" => "overall",
+                "salopeit" => "overall",
+                "سالوبيت" => "overall",
+                "abaya" => "overall",
+                "عباية" => "overall",
+                "عبايات" => "overall",
                 "galabeya" => "overall",
                 "galabiya" => "overall",
                 "jellabiya" => "overall",
-                "t-shirt" or "shirt" or "hoodie" or "jacket" => "upper",
+                "t-shirt" or "jersey" or "tank-top" or "tanktop" or "shirt" or "chemise" or "blouse" or "hoodie" or "jacket" => "upper",
                 _ => string.IsNullOrWhiteSpace(garmentArea) ? garmentArea : garmentArea.Trim().ToLowerInvariant()
+            };
+        }
+
+        private async Task<string> ResolveTargetBodyAsync(int userId, string? postedGender, CancellationToken cancellationToken)
+        {
+            var normalized = NormalizeTargetBody(postedGender);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                return normalized;
+            }
+
+            var savedGender = await _context.UserMeasurements
+                .AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.Gender)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return NormalizeTargetBody(savedGender) ?? "male";
+        }
+
+        private static string? NormalizeTargetBody(string? value)
+        {
+            var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                "male" or "man" or "men" => "male",
+                "female" or "woman" or "women" => "female",
+                "child" or "children" or "kid" or "kids" => "child",
+                _ => null
+            };
+        }
+
+        private static bool IsAllowedClothingForTarget(string targetBody, string? clothingType)
+        {
+            var normalizedType = NormalizeClothingType(clothingType);
+            if (string.IsNullOrWhiteSpace(normalizedType))
+            {
+                return true;
+            }
+
+            return targetBody switch
+            {
+                "female" => normalizedType is "t-shirt" or "shirt" or "chemise" or "blouse" or "hoodie" or "jacket" or "pants" or "shorts" or "dress" or "abaya" or "jumpsuit",
+                "child" => normalizedType is "t-shirt" or "jersey" or "tank-top" or "shirt" or "hoodie" or "jacket" or "pants" or "shorts" or "dress" or "galabeya" or "jumpsuit",
+                _ => normalizedType is "t-shirt" or "jersey" or "tank-top" or "shirt" or "hoodie" or "jacket" or "pants" or "shorts" or "galabeya"
+            };
+        }
+
+        private static string NormalizeClothingType(string? clothingType)
+        {
+            var normalized = (clothingType ?? string.Empty)
+                .Trim()
+                .ToLowerInvariant()
+                .Replace(" ", "-")
+                .Replace("_", "-");
+
+            return normalized switch
+            {
+                "tee" => "t-shirt",
+                "tshirt" => "t-shirt",
+                "t-shirts" => "t-shirt",
+                "sports-shirt" => "jersey",
+                "sport-shirt" => "jersey",
+                "hockey-jersey" => "jersey",
+                "football-jersey" => "jersey",
+                "basketball-jersey" => "jersey",
+                "tanktop" => "tank-top",
+                "vest" => "tank-top",
+                "sleeveless" => "tank-top",
+                "sleeveless-shirt" => "tank-top",
+                "chemise-shirt" => "chemise",
+                "blouses" => "blouse",
+                "hoodies" => "hoodie",
+                "coats" => "jacket",
+                "trouser" => "pants",
+                "trousers" => "pants",
+                "jeans" => "pants",
+                "short" => "shorts",
+                "galabiya" => "galabeya",
+                "jellabiya" => "galabeya",
+                "jalabiya" => "galabeya",
+                "overall" => "jumpsuit",
+                "overalls" => "jumpsuit",
+                "romper" => "jumpsuit",
+                "salopette" => "jumpsuit",
+                "salopeit" => "jumpsuit",
+                "سالوبيت" => "jumpsuit",
+                "abayas" => "abaya",
+                "عباية" => "abaya",
+                "عبايات" => "abaya",
+                _ => normalized
             };
         }
 

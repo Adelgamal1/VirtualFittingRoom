@@ -25,8 +25,10 @@ namespace VirtualFittingRoom.Controllers
             var images = _context.UserImages
                 .Where(i => i.UserMeasurementId == userId)
                 .OrderByDescending(i =>
-                    i.Rating == "Excellent" ? 3 :
-                    i.Rating == "Very Good" ? 2 : 1)
+                    i.Rating == "Excellent" ? 4 :
+                    i.Rating == "Very Good" ? 3 :
+                    i.Rating == "Good" ? 2 :
+                    i.Rating == "Bad" ? 1 : 0)
                 .ThenByDescending(i => i.CreatedAt)
                 .ToList();
 

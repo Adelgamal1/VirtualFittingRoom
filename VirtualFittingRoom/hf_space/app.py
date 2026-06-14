@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import sys
 from pathlib import Path
@@ -19,6 +20,9 @@ MODEL_REPO_ID = os.getenv("CATVTON_MODEL_REPO_ID", "Adelgamal1/virtual-fitting-r
 
 
 def find_project_bundle(project_root: Path) -> Path:
+    if (project_root / "model" / "pipeline.py").exists():
+        return project_root
+
     for candidate in project_root.iterdir():
         if candidate.is_dir() and (candidate / "model" / "pipeline.py").exists():
             return candidate
@@ -28,6 +32,10 @@ def find_project_bundle(project_root: Path) -> Path:
 
 
 def find_nested_directory(project_root: Path, directory_name: str) -> Path:
+    direct = project_root / directory_name
+    if direct.is_dir():
+        return direct
+
     matches = sorted(
         [candidate for candidate in project_root.rglob(directory_name) if candidate.is_dir()],
         key=lambda path: str(path),
@@ -37,19 +45,140 @@ def find_nested_directory(project_root: Path, directory_name: str) -> Path:
     return matches[-1]
 
 
-def build_fallback_mask(image: Image.Image, category: str) -> Image.Image:
+def read_pose_landmarks(pose_landmarks_data, image_size):
+    if not pose_landmarks_data:
+        return None
+
+    try:
+        payload = json.loads(pose_landmarks_data)
+        landmarks = payload.get("landmarks") or []
+        width, height = image_size
+
+        def read_point(index, min_visibility=0.24):
+            if index >= len(landmarks):
+                return None
+            item = landmarks[index] or {}
+            visibility = float(item.get("visibility", 1.0))
+            if visibility < min_visibility:
+                return None
+
+            x = float(item.get("x", 0.0))
+            y = float(item.get("y", 0.0))
+            if x <= 1.5 and y <= 1.5:
+                x *= width
+                y *= height
+            return (x, y, visibility)
+
+        shoulder_a = read_point(11, 0.34)
+        shoulder_b = read_point(12, 0.34)
+        hip_a = read_point(23, 0.22)
+        hip_b = read_point(24, 0.22)
+        if not shoulder_a or not shoulder_b or not hip_a or not hip_b:
+            return None
+
+        left_shoulder, right_shoulder = sorted([shoulder_a, shoulder_b], key=lambda point: point[0])
+        left_hip, right_hip = sorted([hip_a, hip_b], key=lambda point: point[0])
+        shoulder_width = abs(right_shoulder[0] - left_shoulder[0])
+        if shoulder_width < width * 0.08 or shoulder_width > width * 0.78:
+            return None
+
+        shoulder_center = (
+            (left_shoulder[0] + right_shoulder[0]) / 2,
+            (left_shoulder[1] + right_shoulder[1]) / 2,
+        )
+        hip_center = (
+            (left_hip[0] + right_hip[0]) / 2,
+            (left_hip[1] + right_hip[1]) / 2,
+        )
+        torso_height = hip_center[1] - shoulder_center[1]
+        if torso_height < height * 0.15:
+            return None
+
+        return {
+            "left_shoulder": left_shoulder,
+            "right_shoulder": right_shoulder,
+            "left_hip": left_hip,
+            "right_hip": right_hip,
+            "shoulder_center": shoulder_center,
+            "hip_center": hip_center,
+            "shoulder_width": shoulder_width,
+            "torso_height": torso_height,
+            "collar_y": shoulder_center[1] - (shoulder_width * 0.12),
+            "neck_y": shoulder_center[1] - (shoulder_width * 0.18),
+        }
+    except Exception:
+        return None
+
+
+def build_fallback_mask(image: Image.Image, category: str, pose_landmarks_data=None) -> Image.Image:
     width, height = image.size
     mask = Image.new("L", (width, height), 0)
     draw = ImageDraw.Draw(mask)
+    pose = read_pose_landmarks(pose_landmarks_data, image.size)
 
     if category == "upper":
-        box = (int(width * 0.18), int(height * 0.08), int(width * 0.82), int(height * 0.58))
+        if pose:
+            shoulder_width = pose["shoulder_width"]
+            shoulder_y = int(pose["shoulder_center"][1] - (shoulder_width * 0.06))
+            collar_y = int(pose["collar_y"])
+            waist_y = pose["shoulder_center"][1] + (pose["torso_height"] * 0.62)
+            hem_y = int(min(height * 0.88, waist_y + (shoulder_width * 0.16)))
+            center = int((pose["shoulder_center"][0] * 0.64) + (pose["hip_center"][0] * 0.36))
+            left_shoulder_x = int(pose["left_shoulder"][0])
+            right_shoulder_x = int(pose["right_shoulder"][0])
+            left = int(max(0, left_shoulder_x - (shoulder_width * 0.52)))
+            right = int(min(width, right_shoulder_x + (shoulder_width * 0.52)))
+            bottom_half = int(max(shoulder_width * 0.56, abs(pose["right_hip"][0] - pose["left_hip"][0]) * 0.68))
+
+            shirt_shape = [
+                (left, int(shoulder_y + shoulder_width * 0.18)),
+                (int(left_shoulder_x - shoulder_width * 0.08), collar_y),
+                (int(center - shoulder_width * 0.18), int(collar_y - shoulder_width * 0.045)),
+                (int(center + shoulder_width * 0.18), int(collar_y - shoulder_width * 0.045)),
+                (int(right_shoulder_x + shoulder_width * 0.08), collar_y),
+                (right, int(shoulder_y + shoulder_width * 0.18)),
+                (int(center + bottom_half), hem_y),
+                (int(center - bottom_half), hem_y),
+            ]
+            draw.polygon(shirt_shape, fill=255)
+
+            neck_cutout = (
+                int(center - shoulder_width * 0.13),
+                int(collar_y - shoulder_width * 0.10),
+                int(center + shoulder_width * 0.13),
+                int(collar_y + shoulder_width * 0.055),
+            )
+            draw.ellipse(neck_cutout, fill=0)
+        else:
+            shoulder_y = int(height * 0.20)
+            hem_y = int(height * 0.64)
+            left = int(width * 0.14)
+            right = int(width * 0.86)
+            center = width // 2
+
+            shirt_shape = [
+                (center, shoulder_y),
+                (right, int(height * 0.23)),
+                (int(width * 0.80), hem_y),
+                (int(width * 0.20), hem_y),
+                (left, int(height * 0.23)),
+            ]
+            draw.polygon(shirt_shape, fill=255)
+
+            # Preserve face and neck when DensePose/SCHP are unavailable.
+            neck_cutout = (
+                int(width * 0.40),
+                int(height * 0.13),
+                int(width * 0.60),
+                int(height * 0.27),
+            )
+            draw.ellipse(neck_cutout, fill=0)
     elif category == "lower":
         box = (int(width * 0.22), int(height * 0.42), int(width * 0.78), int(height * 0.96))
+        draw.rounded_rectangle(box, radius=max(12, width // 16), fill=255)
     else:
         box = (int(width * 0.16), int(height * 0.06), int(width * 0.84), int(height * 0.96))
-
-    draw.rounded_rectangle(box, radius=max(12, width // 16), fill=255)
+        draw.rounded_rectangle(box, radius=max(12, width // 16), fill=255)
     return mask
 
 
@@ -57,9 +186,51 @@ def normalize_category(value: str) -> str:
     text = (value or "").strip().lower()
     if "lower" in text:
         return "lower"
-    if "full" in text or "overall" in text or "dress" in text:
+    if "full" in text or "overall" in text or "dress" in text or "abaya" in text or "عباية" in text or "عبايات" in text:
         return "overall"
     return "upper"
+
+
+def protect_identity_regions(mask: Image.Image, category: str, pose_landmarks_data=None) -> Image.Image:
+    if category != "upper":
+        return mask
+
+    mask = mask.convert("L")
+    width, height = mask.size
+    protected = Image.new("L", (width, height), 0)
+    draw = ImageDraw.Draw(protected)
+    pose = read_pose_landmarks(pose_landmarks_data, mask.size)
+
+    if pose:
+        shoulder_width = pose["shoulder_width"]
+        center_x = int(pose["shoulder_center"][0])
+        collar_y = int(pose["collar_y"])
+        draw.rectangle((0, 0, width, max(0, int(collar_y - shoulder_width * 0.16))), fill=255)
+        draw.ellipse(
+            (
+                int(center_x - shoulder_width * 0.18),
+                int(collar_y - shoulder_width * 0.18),
+                int(center_x + shoulder_width * 0.18),
+                int(collar_y + shoulder_width * 0.08),
+            ),
+            fill=255,
+        )
+        mask.paste(0, mask=protected)
+        return mask
+
+    draw.rectangle((0, 0, width, int(height * 0.15)), fill=255)
+    draw.ellipse(
+        (
+            int(width * 0.37),
+            int(height * 0.10),
+            int(width * 0.63),
+            int(height * 0.30),
+        ),
+        fill=255,
+    )
+
+    mask.paste(0, mask=protected)
+    return mask
 
 
 def load_image_value(value) -> Image.Image | None:
@@ -188,6 +359,7 @@ def run_tryon(
     auto_crop=False,
     denoise_steps=20,
     seed=555,
+    pose_landmarks_data="",
 ):
     person_image = load_image_value(person_image)
     cloth_image = load_image_value(cloth_image)
@@ -195,16 +367,18 @@ def run_tryon(
     if person_image is None or cloth_image is None:
         raise gr.Error("Please upload both the person image and the clothing image.")
 
-    runtime = get_runtime()
     person_image = person_image.convert("RGB")
     cloth_image = cloth_image.convert("RGB")
     category = normalize_category(garment_description)
+
+    runtime = get_runtime()
 
     if auto_mask and runtime["masker"] is not None:
         mask_result = runtime["masker"](person_image, mask_type=category)
         mask = mask_result["mask"]
     else:
-        mask = build_fallback_mask(person_image, category)
+        mask = build_fallback_mask(person_image, category, pose_landmarks_data)
+    mask = protect_identity_regions(mask, category, pose_landmarks_data)
 
     generator = torch.Generator(device=runtime["device"])
     generator.manual_seed(int(seed))
@@ -253,6 +427,7 @@ with gr.Blocks(title="Virtual Fitting Room") as demo:
     with gr.Row():
         denoise_steps_input = gr.Slider(10, 50, value=20, step=1, label="Denoise Steps")
         seed_input = gr.Number(value=555, precision=0, label="Seed")
+    pose_landmarks_input = gr.Textbox(value="", visible=False, label="Pose Landmarks")
 
     run_button = gr.Button("Run Try-On", variant="primary")
     output_image = gr.Image(type="pil", label="Result")
@@ -267,6 +442,7 @@ with gr.Blocks(title="Virtual Fitting Room") as demo:
             auto_crop_input,
             denoise_steps_input,
             seed_input,
+            pose_landmarks_input,
         ],
         outputs=output_image,
         api_name="tryon",

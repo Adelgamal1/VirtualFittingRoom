@@ -16,11 +16,13 @@
           data-tryon-form
           data-public-live="@isPublicLive.ToString().ToLowerInvariant()"
           data-initial-clothing-url="@initialClothingUrl"
+          data-live-preview="true"
           data-auto-camera="@isPublicLive.ToString().ToLowerInvariant()">
         <div asp-validation-summary="All" class="text-danger small mb-3"></div>
 
         <input type="hidden" name="imageData" id="imageData" data-image-data />
         <input type="hidden" name="clothingImageData" id="clothingImageData" data-clothing-image-data />
+        <input type="hidden" name="poseLandmarksData" data-pose-landmarks />
 
         <div class="studio-device">
             <div class="device-topbar">
@@ -56,6 +58,10 @@
                                 <button type="button" class="live-action-btn" data-live-clothing-link-trigger>
                                     <i class="bi bi-link-45deg"></i>
                                     <span>Link</span>
+                                </button>
+                                <button type="button" class="live-action-btn" data-live-ai-fit>
+                                    <i class="bi bi-stars"></i>
+                                    <span>AI Fit</span>
                                 </button>
                             </div>
                             <div class="live-link-panel d-none" data-live-clothing-link-panel>
@@ -140,6 +146,7 @@
                     <div class="preview-grid">
                         <div class="preview-tile">
                             <img alt="Person preview" class="preview-image d-none" data-pose-preview />
+                            <canvas class="pose-landmark-overlay d-none" data-pose-overlay></canvas>
                             <p class="preview-empty" data-pose-empty>Person preview</p>
                         </div>
                         <div class="preview-tile">
@@ -164,11 +171,11 @@
                 <div class="settings-stack">
                     <label>
                         <span>Target body</span>
-                        <select name="Gender" class="form-select" required>
+                        <select name="Gender" class="form-select" required data-target-body>
                             <option value="">Select target</option>
                             <option value="Male" selected="@(user?.Gender == "Male")">Male</option>
                             <option value="Female" selected="@(user?.Gender == "Female")">Female</option>
-                            <option value="Child">Child</option>
+                            <option value="Child" selected="@(user?.Gender == "Child")">Child</option>
                         </select>
                     </label>
 
@@ -211,14 +218,28 @@
                         <span>Clothing type</span>
                         <select id="clothing" name="ClothingType" class="form-select" required data-clothing-category>
                             <option value="">Select category</option>
-                            <option value="T-Shirt" selected="@(initialClothingType == "T-Shirt")">T-Shirt</option>
-                            <option value="Shirt" selected="@(initialClothingType == "Shirt")">Shirt</option>
-                            <option value="Hoodie" selected="@(initialClothingType == "Hoodie")">Hoodie</option>
-                            <option value="Jacket" selected="@(initialClothingType == "Jacket")">Jacket</option>
-                            <option value="Dress" selected="@(initialClothingType == "Dress")">Dress</option>
-                            <option value="Pants" selected="@(initialClothingType == "Pants")">Pants</option>
-                            <option value="Shorts" selected="@(initialClothingType == "Shorts")">Shorts</option>
-                            <option value="Galabeya" selected="@(initialClothingType == "Galabeya")">Galabeya</option>
+                            <option value="T-Shirt" data-audience="male female child" data-area="upper" selected="@(initialClothingType == "T-Shirt")">T-Shirt</option>
+                            <option value="Jersey" data-audience="male child" data-area="upper" selected="@(initialClothingType == "Jersey")">Jersey</option>
+                            <option value="Tank Top" data-audience="male child" data-area="upper" selected="@(initialClothingType == "Tank Top")">Tank Top</option>
+                            <option value="Shirt" data-audience="male female child" data-area="upper" selected="@(initialClothingType == "Shirt")">Shirt</option>
+                            <option value="Chemise" data-audience="female" data-area="upper" selected="@(initialClothingType == "Chemise")">Chemise</option>
+                            <option value="Blouse" data-audience="female" data-area="upper" selected="@(initialClothingType == "Blouse")">Blouse</option>
+                            <option value="Hoodie" data-audience="male female child" data-area="upper" selected="@(initialClothingType == "Hoodie")">Hoodie</option>
+                            <option value="Jacket" data-audience="male female child" data-area="upper" selected="@(initialClothingType == "Jacket")">Jacket</option>
+                            <option value="Pants" data-audience="male female child" data-area="lower" selected="@(initialClothingType == "Pants")">Pants</option>
+                            <option value="Shorts" data-audience="male female child" data-area="lower" selected="@(initialClothingType == "Shorts")">Shorts</option>
+                            <option value="Dress" data-audience="female child" data-area="overall" selected="@(initialClothingType == "Dress")">Dress</option>
+                            <option value="Abaya" data-audience="female" data-area="overall" selected="@(initialClothingType == "Abaya")">Abaya</option>
+                            <option value="Galabeya" data-audience="male child" data-area="overall" selected="@(initialClothingType == "Galabeya")">Galabeya</option>
+                            <option value="Jumpsuit" data-audience="female child" data-area="overall" selected="@(initialClothingType == "Jumpsuit")">Jumpsuit / Salopette</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        <span>Model view</span>
+                        <select name="GarmentView" class="form-select" required data-garment-view>
+                            <option value="front">Front</option>
+                            <option value="back">Back</option>
                         </select>
                     </label>
 

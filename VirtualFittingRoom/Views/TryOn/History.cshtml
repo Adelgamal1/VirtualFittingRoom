@@ -38,13 +38,25 @@ else
                     </div>
 
                     <h3>Saved fitting result</h3>
-                    <p>Tap the image to zoom in, then download the full result if needed.</p>
+                    <p>Tap the image to zoom in, then download or remove this saved result.</p>
 
-                    <a asp-action="Download"
-                       asp-route-id="@img.Id"
-                       class="btn btn-ghost w-100">
-                        Download Capture
-                    </a>
+                    <div class="history-card-actions">
+                        <a asp-action="Download"
+                           asp-route-id="@img.Id"
+                           class="btn btn-ghost">
+                            <i class="bi bi-download"></i>
+                            Download
+                        </a>
+                        <form asp-action="Delete"
+                              asp-route-id="@img.Id"
+                              method="post"
+                              onsubmit="return confirm('Delete this fitting result?');">
+                            <button type="submit" class="btn btn-danger-soft">
+                                <i class="bi bi-trash3"></i>
+                                Delete
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </article>
         }

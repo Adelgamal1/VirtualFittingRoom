@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.SqlClient;
 using VirtualFittingRoom.Data;
@@ -6,6 +7,13 @@ using VirtualFittingRoom.Models;
 using VirtualFittingRoom.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var railwayPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(railwayPort) &&
+    string.IsNullOrWhiteSpace(builder.Configuration["ASPNETCORE_URLS"]))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{railwayPort}");
+}
 
 // Keep a predictable local URL for Visual Studio and browser launch.
 // Azure/App Service will inject its own binding via environment variables.
@@ -52,6 +60,7 @@ if (HasAuthConfig("Authentication:Google:ClientId") &&
     {
         options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? string.Empty;
         options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? string.Empty;
+        options.CallbackPath = builder.Configuration["Authentication:Google:CallbackPath"] ?? "/signin-google";
         options.SignInScheme = "External";
         options.SaveTokens = true;
         options.CorrelationCookie.SameSite = SameSiteMode.Lax;
@@ -124,6 +133,11 @@ await WarmUpDatabaseAsync(app);
 
 // ================= Middleware =================
 
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
@@ -146,7 +160,9 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
-    app.Run();
+app.MapGet("/healthz", () => Results.Ok("ok"));
+
+app.Run();
 
 static async Task WarmUpDatabaseAsync(WebApplication app)
 {

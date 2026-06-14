@@ -62,11 +62,11 @@ def build_fallback_mask(image: Image.Image, category: str) -> Image.Image:
 
 def normalize_category(category: str) -> str:
     value = (category or "upper").strip().lower()
-    if value in {"t-shirt", "tshirt", "tee", "shirt", "hoodie", "jacket", "upper_body"}:
+    if value in {"t-shirt", "tshirt", "tee", "tank-top", "tanktop", "vest", "sleeveless", "shirt", "blouse", "hoodie", "jacket", "upper_body"}:
         return "upper"
     if value in {"pants", "trousers", "jeans", "shorts", "lower_body"}:
         return "lower"
-    if value in {"dress", "dresses", "galabeya", "galabiya", "overall"}:
+    if value in {"dress", "dresses", "abaya", "abayas", "عباية", "عبايات", "galabeya", "galabiya", "overall"}:
         return "overall"
     return value if value in {"upper", "lower", "overall"} else "upper"
 
@@ -220,11 +220,14 @@ def create_app(args):
         person_image: UploadFile = File(...),
         garment_image: UploadFile = File(...),
         category: str = Form("upper"),
+        clothing_type: str = Form(""),
+        garment_view: str = Form("front"),
     ):
         try:
             person_bytes = await person_image.read()
             garment_bytes = await garment_image.read()
-            output = run_tryon(args, person_bytes, garment_bytes, category)
+            effective_category = clothing_type or category
+            output = run_tryon(args, person_bytes, garment_bytes, effective_category)
             return Response(content=output, media_type="image/png")
         except Exception as ex:
             return JSONResponse(status_code=500, content={"error": str(ex)})
@@ -240,8 +243,8 @@ def parse_args():
     parser.add_argument("--attn-version", default="mix")
     parser.add_argument("--width", type=int, default=576)
     parser.add_argument("--height", type=int, default=768)
-    parser.add_argument("--steps", type=int, default=20)
-    parser.add_argument("--guidance-scale", type=float, default=2.5)
+    parser.add_argument("--steps", type=int, default=12)
+    parser.add_argument("--guidance-scale", type=float, default=2.0)
     parser.add_argument("--seed", type=int, default=555)
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)

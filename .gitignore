@@ -21,6 +21,9 @@ VirtualFittingRoom/.venv-catvton/
 .tmp-smoke/
 VirtualFittingRoom/.tmp-smoke/
 *.log
+artifacts/
+VirtualFittingRoom/publish/
+VirtualFittingRoom/wwwroot/test-assets/tryon-test-pack.zip
 
 # Environment and local secrets
 .env
@@ -38,6 +41,12 @@ Thumbs.db
 *.ldf
 
 # Model/checkpoint weights should use Git LFS if committed intentionally.
+base_model-*/
+catvton_weights-*/
+model-*/
+base_model/
+catvton_weights/
+model/
 *.bin
 *.safetensors
 *.pth

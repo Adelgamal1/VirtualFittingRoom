@@ -30,19 +30,53 @@ namespace VirtualFittingRoom.Services
             string garmentArea,
             CancellationToken cancellationToken = default)
         {
+            return await RunAsync(personImage, clothingImage, garmentArea, null, null, cancellationToken);
+        }
+
+        public async Task<(bool Success, byte[]? OutputBytes, string? Error)> RunAsync(
+            byte[] personImage,
+            byte[] clothingImage,
+            string garmentArea,
+            string? clothingType,
+            CancellationToken cancellationToken = default)
+        {
+            return await RunAsync(personImage, clothingImage, garmentArea, clothingType, null, cancellationToken);
+        }
+
+        public async Task<(bool Success, byte[]? OutputBytes, string? Error)> RunAsync(
+            byte[] personImage,
+            byte[] clothingImage,
+            string garmentArea,
+            string? clothingType,
+            string? garmentView,
+            CancellationToken cancellationToken = default)
+        {
+            return await RunAsync(personImage, clothingImage, garmentArea, clothingType, garmentView, null, cancellationToken);
+        }
+
+        public async Task<(bool Success, byte[]? OutputBytes, string? Error)> RunAsync(
+            byte[] personImage,
+            byte[] clothingImage,
+            string garmentArea,
+            string? clothingType,
+            string? garmentView,
+            string? poseLandmarksData,
+            CancellationToken cancellationToken = default)
+        {
             try
             {
                 var normalizedGarmentArea = NormalizeGarmentArea(garmentArea);
+                var normalizedGarmentView = NormalizeGarmentView(garmentView);
                 var localMode = IsLocalMode();
                 personImage = ResizeImageForInference(personImage, localMode ? 560 : 900, 76);
                 clothingImage = ResizeImageForInference(clothingImage, localMode ? 420 : 700, 76);
 
                 return IsApiMode()
-                    ? await RunAgainstApiAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken)
+                    ? await RunAgainstApiAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken, null, clothingType, normalizedGarmentView, poseLandmarksData)
                     : IsReplicateMode()
                     ? await RunAgainstReplicateAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken)
                     : IsHuggingFaceMode()
-                    ? await RunAgainstHuggingFaceSpaceAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken)
+                    ? await RunAgainstHuggingFaceSpaceAsync(personImage, clothingImage, normalizedGarmentArea, clothingType, normalizedGarmentView, poseLandmarksData, cancellationToken)
                     : await RunAgainstLocalServerAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken);
             }
             catch (Exception ex)
@@ -67,6 +101,9 @@ namespace VirtualFittingRoom.Services
                     personImage,
                     clothingImage,
                     normalizedGarmentArea,
+                    null,
+                    null,
+                    null,
                     cancellationToken);
             }
             catch (Exception ex)
@@ -82,12 +119,38 @@ namespace VirtualFittingRoom.Services
             string apiUrl,
             CancellationToken cancellationToken = default)
         {
+            return await RunApiAsync(personImage, clothingImage, garmentArea, null, null, apiUrl, cancellationToken);
+        }
+
+        public async Task<(bool Success, byte[]? OutputBytes, string? Error)> RunApiAsync(
+            byte[] personImage,
+            byte[] clothingImage,
+            string garmentArea,
+            string? clothingType,
+            string? garmentView,
+            string apiUrl,
+            CancellationToken cancellationToken = default)
+        {
+            return await RunApiAsync(personImage, clothingImage, garmentArea, clothingType, garmentView, apiUrl, null, cancellationToken);
+        }
+
+        public async Task<(bool Success, byte[]? OutputBytes, string? Error)> RunApiAsync(
+            byte[] personImage,
+            byte[] clothingImage,
+            string garmentArea,
+            string? clothingType,
+            string? garmentView,
+            string apiUrl,
+            string? poseLandmarksData,
+            CancellationToken cancellationToken = default)
+        {
             try
             {
                 var normalizedGarmentArea = NormalizeGarmentArea(garmentArea);
+                var normalizedGarmentView = NormalizeGarmentView(garmentView);
                 personImage = ResizeImageForInference(personImage, 900, 84);
                 clothingImage = ResizeImageForInference(clothingImage, 700, 84);
-                return await RunAgainstApiAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken, apiUrl);
+                return await RunAgainstApiAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken, apiUrl, clothingType, normalizedGarmentView, poseLandmarksData);
             }
             catch (Exception ex)
             {
@@ -114,6 +177,9 @@ namespace VirtualFittingRoom.Services
             byte[] personImage,
             byte[] clothingImage,
             string garmentArea,
+            string? clothingType,
+            string? garmentView,
+            string? poseLandmarksData,
             CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(_options.HuggingFaceSpaceUrl))
@@ -142,10 +208,11 @@ namespace VirtualFittingRoom.Services
 
             var personFile = await UploadGradioFileAsync(client, baseUrl, personImage, "person.png", cancellationToken);
             var garmentFile = await UploadGradioFileAsync(client, baseUrl, clothingImage, "garment.png", cancellationToken);
+            var shouldSendPose = !string.IsNullOrWhiteSpace(poseLandmarksData);
 
-            var request = new
+            object BuildRequest(bool includePoseLandmarks)
             {
-                data = new object?[]
+                var data = new List<object?>
                 {
                     new
                     {
@@ -154,25 +221,64 @@ namespace VirtualFittingRoom.Services
                         composite = (object?)null
                     },
                     garmentFile,
-                    BuildGarmentDescription(garmentArea),
+                    BuildGarmentDescription(garmentArea, clothingType, garmentView),
                     _options.HuggingFaceAutoMask,
                     _options.HuggingFaceAutoCrop,
                     Math.Clamp(_options.HuggingFaceDenoiseSteps, 10, 50),
                     _options.HuggingFaceSeed
+                };
+
+                if (includePoseLandmarks)
+                {
+                    data.Add(poseLandmarksData ?? string.Empty);
                 }
-            };
+
+                return new { data = data.ToArray() };
+            }
 
             using var submitResponse = await client.PostAsJsonAsync(
                 $"{baseUrl}/call/{apiName}",
-                request,
+                BuildRequest(shouldSendPose),
                 cancellationToken);
 
             var submitJson = await submitResponse.Content.ReadAsStringAsync(cancellationToken);
             if (!submitResponse.IsSuccessStatusCode)
             {
+                if (shouldSendPose && IsGradioInputCountError(submitJson))
+                {
+                    using var retryResponse = await client.PostAsJsonAsync(
+                        $"{baseUrl}/call/{apiName}",
+                        BuildRequest(false),
+                        cancellationToken);
+
+                    var retryJson = await retryResponse.Content.ReadAsStringAsync(cancellationToken);
+                    if (!retryResponse.IsSuccessStatusCode)
+                    {
+                        return (false, null, BuildHuggingFaceHttpError("submit the try-on request", (int)retryResponse.StatusCode, retryJson, baseUrl));
+                    }
+
+                    return await ReadHuggingFaceQueuedResultAsync(client, baseUrl, apiName, retryJson, cancellationToken);
+                }
+
                 return (false, null, BuildHuggingFaceHttpError("submit the try-on request", (int)submitResponse.StatusCode, submitJson, baseUrl));
             }
 
+            return await ReadHuggingFaceQueuedResultAsync(client, baseUrl, apiName, submitJson, cancellationToken);
+        }
+
+        private static bool IsGradioInputCountError(string responseBody)
+        {
+            return responseBody.Contains("Expected", StringComparison.OrdinalIgnoreCase) &&
+                   responseBody.Contains("arguments", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task<(bool Success, byte[]? OutputBytes, string? Error)> ReadHuggingFaceQueuedResultAsync(
+            HttpClient client,
+            string baseUrl,
+            string apiName,
+            string submitJson,
+            CancellationToken cancellationToken)
+        {
             var eventId = ReadJsonString(submitJson, "event_id");
             if (string.IsNullOrWhiteSpace(eventId))
             {
@@ -296,7 +402,10 @@ namespace VirtualFittingRoom.Services
             byte[] clothingImage,
             string garmentArea,
             CancellationToken cancellationToken,
-            string? apiUrlOverride = null)
+            string? apiUrlOverride = null,
+            string? clothingType = null,
+            string? garmentView = null,
+            string? poseLandmarksData = null)
         {
             var apiUrl = string.IsNullOrWhiteSpace(apiUrlOverride)
                 ? _options.ApiUrl?.Trim()
@@ -321,6 +430,12 @@ namespace VirtualFittingRoom.Services
             content.Add(CreateImageContent(personImage, "person.png"), _options.ApiPersonFieldName, "person.png");
             content.Add(CreateImageContent(clothingImage, "cloth.png"), _options.ApiClothingFieldName, "cloth.png");
             content.Add(new StringContent(garmentArea), _options.ApiCategoryFieldName);
+            content.Add(new StringContent(NormalizeClothingType(clothingType)), "clothing_type");
+            content.Add(new StringContent(NormalizeGarmentView(garmentView)), "garment_view");
+            if (!string.IsNullOrWhiteSpace(poseLandmarksData))
+            {
+                content.Add(new StringContent(poseLandmarksData), "pose_landmarks_data");
+            }
 
             if (!string.IsNullOrWhiteSpace(_options.ApiKey) &&
                 !_options.ApiKey.StartsWith("PUT_", StringComparison.OrdinalIgnoreCase))
@@ -342,7 +457,7 @@ namespace VirtualFittingRoom.Services
             if (!response.IsSuccessStatusCode)
             {
                 var responseText = SafeReadText(responseBytes);
-                return (false, null, $"API returned HTTP {(int)response.StatusCode}: {responseText}");
+                return (false, null, BuildApiErrorMessage(apiUrl, (int)response.StatusCode, responseText));
             }
 
             if (IsImageResponse(response.Content.Headers.ContentType?.MediaType))
@@ -516,6 +631,16 @@ namespace VirtualFittingRoom.Services
 
         private string BuildGarmentDescription(string garmentArea)
         {
+            return BuildGarmentDescription(garmentArea, null, null);
+        }
+
+        private string BuildGarmentDescription(string garmentArea, string? clothingType)
+        {
+            return BuildGarmentDescription(garmentArea, clothingType, null);
+        }
+
+        private string BuildGarmentDescription(string garmentArea, string? clothingType, string? garmentView)
+        {
             var normalizedArea = NormalizeGarmentArea(garmentArea);
             var configuredDescription = _options.HuggingFaceGarmentDescription?.Trim();
 
@@ -525,11 +650,93 @@ namespace VirtualFittingRoom.Services
                 return configuredDescription;
             }
 
+            var normalizedType = NormalizeClothingType(clothingType);
+            var view = NormalizeGarmentView(garmentView);
+            var viewText = view == "back" ? "back-facing" : "front-facing";
+            var neckText = view == "back" ? "nape to collar, back neck to garment collar" : "neck to neck";
+            if (!string.IsNullOrWhiteSpace(normalizedType))
+            {
+                return normalizedType switch
+                {
+                    "t-shirt" => $"{viewText} t-shirt worn naturally on the body, round collar placed below the neck on the collarbone, shoulder seam to shoulder seam, sleeves wrapped on arms, not pasted as a flat sticker",
+                    "tank-top" => $"{viewText} sleeveless tank top aligned {neckText}, shoulder strap to shoulder, chest panel to torso",
+                    "shirt" => $"{viewText} shirt aligned {neckText}, shoulder to shoulder, elbow to elbow",
+                    "chemise" => $"{viewText} chemise blouse aligned {neckText}, shoulder to shoulder, sleeve to arm",
+                    "blouse" => $"{viewText} blouse aligned {neckText}, shoulder to shoulder, sleeve to arm, cuff to wrist",
+                    "hoodie" => $"{viewText} hoodie aligned {neckText}, shoulder to shoulder, sleeves on arms",
+                    "jacket" => $"{viewText} jacket aligned {neckText}, shoulder to shoulder, sleeves on arms",
+                    "pants" => "pants aligned waist to waist and knee to knee",
+                    "shorts" => "shorts aligned waist to waist and knee to knee",
+                    "dress" => $"{viewText} dress aligned {neckText}, shoulder to shoulder, waist to waist, knee to knee",
+                    "abaya" => $"{viewText} abaya aligned {neckText}, shoulder to shoulder, elbow to sleeve, full length hem aligned to legs",
+                    "galabeya" => $"{viewText} galabeya aligned {neckText}, shoulder to shoulder, elbow to elbow, knee to knee",
+                    "jumpsuit" => $"{viewText} child or adult jumpsuit salopette full body outfit aligned {neckText}, shoulder to shoulder, elbow to elbow, waist to waist, knee to knee",
+                    _ => $"{normalizedType} clothing garment"
+                };
+            }
+
             return normalizedArea switch
             {
                 "lower" => "pants or shorts",
                 "overall" => "galabeya, dress, or full body outfit",
                 _ => "upper body garment"
+            };
+        }
+
+        private static string NormalizeClothingType(string? clothingType)
+        {
+            var normalized = (clothingType ?? string.Empty)
+                .Trim()
+                .ToLowerInvariant()
+                .Replace(" ", "-")
+                .Replace("_", "-");
+
+            return normalized switch
+            {
+                "tee" => "t-shirt",
+                "tshirt" => "t-shirt",
+                "t-shirts" => "t-shirt",
+                "tanktop" => "tank-top",
+                "vest" => "tank-top",
+                "sleeveless" => "tank-top",
+                "sleeveless-shirt" => "tank-top",
+                "chemise-shirt" => "chemise",
+                "blouses" => "blouse",
+                "hoodies" => "hoodie",
+                "coats" => "jacket",
+                "trouser" => "pants",
+                "trousers" => "pants",
+                "jeans" => "pants",
+                "short" => "shorts",
+                "abaya" => "abaya",
+                "abayas" => "abaya",
+                "عباية" => "abaya",
+                "عبايات" => "abaya",
+                "galabiya" => "galabeya",
+                "jellabiya" => "galabeya",
+                "jalabiya" => "galabeya",
+                "overall" => "jumpsuit",
+                "overalls" => "jumpsuit",
+                "romper" => "jumpsuit",
+                "salopette" => "jumpsuit",
+                "salopeit" => "jumpsuit",
+                "سالوبيت" => "jumpsuit",
+                _ => normalized
+            };
+        }
+
+        private static string NormalizeGarmentView(string? garmentView)
+        {
+            var normalized = (garmentView ?? string.Empty)
+                .Trim()
+                .ToLowerInvariant()
+                .Replace(" ", "-")
+                .Replace("_", "-");
+
+            return normalized switch
+            {
+                "back" or "rear" or "behind" or "ضهر" or "ظهر" or "من-ورا" => "back",
+                _ => "front"
             };
         }
 
@@ -851,6 +1058,14 @@ namespace VirtualFittingRoom.Services
             {
                 "upper_body" => "upper",
                 "top" => "upper",
+                "tank-top" => "upper",
+                "tanktop" => "upper",
+                "vest" => "upper",
+                "sleeveless" => "upper",
+                "chemise" => "upper",
+                "chemise-shirt" => "upper",
+                "blouse" => "upper",
+                "blouses" => "upper",
                 "lower_body" => "lower",
                 "pants" => "lower",
                 "trousers" => "lower",
@@ -858,10 +1073,20 @@ namespace VirtualFittingRoom.Services
                 "shorts" => "lower",
                 "dress" => "overall",
                 "dresses" => "overall",
+                "jumpsuit" => "overall",
+                "overall" => "overall",
+                "overalls" => "overall",
+                "romper" => "overall",
+                "salopette" => "overall",
+                "salopeit" => "overall",
+                "سالوبيت" => "overall",
+                "abaya" => "overall",
+                "abayas" => "overall",
+                "عباية" => "overall",
+                "عبايات" => "overall",
                 "galabeya" => "overall",
                 "galabiya" => "overall",
                 "jellabiya" => "overall",
-                "overall" => "overall",
                 "lower" => "lower",
                 _ => "upper"
             };
@@ -908,6 +1133,17 @@ namespace VirtualFittingRoom.Services
             }
         }
 
+        private static string BuildApiErrorMessage(string apiUrl, int statusCode, string responseText)
+        {
+            if (statusCode == 530 &&
+                responseText.Contains("1033", StringComparison.OrdinalIgnoreCase))
+            {
+                return $"Colab/Cloudflare tunnel is not reachable. The saved API URL is down or expired: {apiUrl}. Keep the Colab notebook cell running, copy the new URL ending with /tryon, then paste it in the Upload page or update VirtualTryOn:ApiUrl.";
+            }
+
+            return $"API returned HTTP {statusCode}: {responseText}";
+        }
+
         private static string BuildInferenceExceptionMessage(Exception exception)
         {
             var message = exception.Message;
@@ -920,6 +1156,12 @@ namespace VirtualFittingRoom.Services
             if (message.Contains("copying content to a stream", StringComparison.OrdinalIgnoreCase))
             {
                 message += " This usually means the local AI server closed the connection while ASP.NET was sending the images. Check that the Python inference server is still running and that the selected images are valid.";
+            }
+
+            if (message.Contains("No such host is known", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("trycloudflare.com", StringComparison.OrdinalIgnoreCase))
+            {
+                message += " The Colab/Cloudflare tunnel URL is expired or not running. Start the Colab API cell again, copy the new /tryon URL, and paste it in the Upload page.";
             }
 
             return $"AI inference failed: {message}";

@@ -15,7 +15,7 @@
       "applicationUrl": "http://localhost:5001",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "VirtualTryOn__Mode": "HuggingFace",
+        "VirtualTryOn__Mode": "Preview",
         "VirtualTryOn__HuggingFaceSpaceUrl": "https://YOUR_USERNAME-YOUR_SPACE_NAME.hf.space",
         "VirtualTryOn__HuggingFaceApiName": "tryon"
       }
@@ -25,7 +25,7 @@
       "launchBrowser": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "VirtualTryOn__Mode": "HuggingFace",
+        "VirtualTryOn__Mode": "Preview",
         "VirtualTryOn__HuggingFaceSpaceUrl": "https://YOUR_USERNAME-YOUR_SPACE_NAME.hf.space",
         "VirtualTryOn__HuggingFaceApiName": "tryon"
       }

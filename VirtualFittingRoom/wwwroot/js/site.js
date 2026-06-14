@@ -16,11 +16,374 @@
         });
     });
 
-        const form = document.querySelector("[data-tryon-form]");
+    const loadScriptOnce = (src) => new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+            resolve();
+            return;
+        }
+
+        const script = document.createElement("script");
+        script.src = src;
+        script.async = true;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error(`Could not load ${src}`));
+        document.head.appendChild(script);
+    });
+
+    const poseConnections = [
+        [11, 12],
+        [11, 13],
+        [13, 15],
+        [12, 14],
+        [14, 16],
+        [11, 23],
+        [12, 24],
+        [23, 24]
+    ];
+    let staticPoseModel = null;
+    let staticPosePromise = null;
+    let staticPoseResolver = null;
+
+    const serializePoseLandmarks = (landmarks, width, height) => JSON.stringify({
+        width,
+        height,
+        landmarks: (landmarks || []).map(landmark => ({
+            x: Number((landmark.x ?? 0).toFixed(6)),
+            y: Number((landmark.y ?? 0).toFixed(6)),
+            z: Number((landmark.z ?? 0).toFixed(6)),
+            visibility: Number((landmark.visibility ?? 1).toFixed(4))
+        }))
+    });
+
+    const isStaticPoseUsable = (landmarks) => {
+        if (!landmarks?.length) {
+            return false;
+        }
+
+        const visible = (index, min = 0.25) => (landmarks[index]?.visibility ?? 0) >= min;
+        if (![11, 12, 23, 24].every(index => visible(index))) {
+            return false;
+        }
+
+        const leftShoulder = landmarks[11];
+        const rightShoulder = landmarks[12];
+        const leftHip = landmarks[23];
+        const rightHip = landmarks[24];
+        const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
+        const hipY = (leftHip.y + rightHip.y) / 2;
+        const shoulderWidth = Math.abs(rightShoulder.x - leftShoulder.x);
+        const hipWidth = Math.abs(rightHip.x - leftHip.x);
+
+        return shoulderY >= 0.12 &&
+            shoulderY <= 0.42 &&
+            hipY >= 0.40 &&
+            hipY <= 0.86 &&
+            hipY - shoulderY >= 0.18 &&
+            shoulderWidth >= 0.10 &&
+            shoulderWidth <= 0.55 &&
+            hipWidth >= 0.06 &&
+            hipWidth <= 0.48;
+    };
+
+    const clearPoseOverlay = (canvas, input) => {
+        if (input) {
+            input.value = "";
+        }
+
+        if (!canvas) {
+            return;
+        }
+
+        const context = canvas.getContext("2d");
+        context?.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.classList.add("d-none");
+    };
+
+    const initializeStaticPoseModel = async () => {
+        if (staticPoseModel) {
+            return staticPoseModel;
+        }
+
+        if (!staticPosePromise) {
+            staticPosePromise = loadScriptOnce("https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js")
+                .then(() => {
+                    staticPoseModel = new window.Pose({
+                        locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+                    });
+                    staticPoseModel.setOptions({
+                        modelComplexity: 1,
+                        smoothLandmarks: true,
+                        enableSegmentation: false,
+                        selfieMode: false,
+                        minDetectionConfidence: 0.55,
+                        minTrackingConfidence: 0.55
+                    });
+                    staticPoseModel.onResults(results => {
+                        const resolver = staticPoseResolver;
+                        staticPoseResolver = null;
+                        resolver?.(results);
+                    });
+                    return staticPoseModel;
+                });
+        }
+
+        return staticPosePromise;
+    };
+
+    const loadImageElement = (src) => new Promise((resolve, reject) => {
+        if (!src) {
+            reject(new Error("Image source is empty."));
+            return;
+        }
+
+        const image = new Image();
+        if (/^https?:\/\//i.test(src)) {
+            image.crossOrigin = "anonymous";
+        }
+        image.onload = () => resolve(image);
+        image.onerror = reject;
+        image.src = src;
+    });
+
+    const runStaticPoseDetection = async (image) => {
+        const model = await initializeStaticPoseModel();
+        return await new Promise(resolve => {
+            let finished = false;
+            const finish = (results) => {
+                if (finished) {
+                    return;
+                }
+
+                finished = true;
+                resolve(results);
+            };
+
+            staticPoseResolver = finish;
+            window.setTimeout(() => finish(null), 3800);
+            model.send({ image }).catch(() => finish(null));
+        });
+    };
+
+    const drawPoseOverlay = (preview, canvas, landmarks) => {
+        if (!preview || !canvas || !landmarks?.length) {
+            clearPoseOverlay(canvas, null);
+            return;
+        }
+
+        const width = Math.max(1, Math.round(preview.clientWidth || preview.width || 1));
+        const height = Math.max(1, Math.round(preview.clientHeight || preview.height || 1));
+        canvas.width = width;
+        canvas.height = height;
+
+        const naturalWidth = preview.naturalWidth || width;
+        const naturalHeight = preview.naturalHeight || height;
+        const scale = Math.min(width / naturalWidth, height / naturalHeight);
+        const drawnWidth = naturalWidth * scale;
+        const drawnHeight = naturalHeight * scale;
+        const offsetX = (width - drawnWidth) / 2;
+        const offsetY = (height - drawnHeight) / 2;
+        const map = landmark => ({
+            x: offsetX + (landmark.x * drawnWidth),
+            y: offsetY + (landmark.y * drawnHeight),
+            visibility: landmark.visibility ?? 1
+        });
+        const context = canvas.getContext("2d");
+        context.clearRect(0, 0, width, height);
+        context.lineWidth = Math.max(2, width * 0.006);
+        context.lineCap = "round";
+        context.strokeStyle = "rgba(34, 211, 238, 0.92)";
+        context.fillStyle = "rgba(255, 255, 255, 0.95)";
+
+        poseConnections.forEach(([from, to]) => {
+            const a = landmarks[from];
+            const b = landmarks[to];
+            if (!a || !b || (a.visibility ?? 1) < 0.2 || (b.visibility ?? 1) < 0.2) {
+                return;
+            }
+
+            const start = map(a);
+            const end = map(b);
+            context.beginPath();
+            context.moveTo(start.x, start.y);
+            context.lineTo(end.x, end.y);
+            context.stroke();
+        });
+
+        [0, 11, 12, 13, 14, 15, 16, 23, 24].forEach(index => {
+            const landmark = landmarks[index];
+            if (!landmark || (landmark.visibility ?? 1) < 0.2) {
+                return;
+            }
+
+            const point = map(landmark);
+            context.beginPath();
+            context.arc(point.x, point.y, Math.max(3, width * 0.008), 0, Math.PI * 2);
+            context.fill();
+        });
+
+        canvas.classList.remove("d-none");
+    };
+
+    const detectAndStorePose = async (src, preview, canvas, input) => {
+        clearPoseOverlay(canvas, input);
+
+        try {
+            const image = await loadImageElement(src);
+            const results = await runStaticPoseDetection(image);
+            const landmarks = results?.poseLandmarks || [];
+            if (!isStaticPoseUsable(landmarks)) {
+                clearPoseOverlay(canvas, input);
+                return "";
+            }
+
+            const payload = serializePoseLandmarks(landmarks, image.naturalWidth || image.width, image.naturalHeight || image.height);
+            if (input) {
+                input.value = payload;
+            }
+            drawPoseOverlay(preview, canvas, landmarks);
+            return payload;
+        } catch {
+            clearPoseOverlay(canvas, input);
+            return "";
+        }
+    };
+
+    const normalizeCatalogValue = (value) => (value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[_\s]+/g, "-");
+
+    const normalizeTargetBody = (value) => {
+        const normalized = normalizeCatalogValue(value);
+        return {
+            man: "male",
+            men: "male",
+            woman: "female",
+            women: "female",
+            kid: "child",
+            kids: "child",
+            children: "child"
+        }[normalized] || normalized;
+    };
+
+    const categoryAreaMap = {
+        "pants": "lower",
+        "trousers": "lower",
+        "jeans": "lower",
+        "short": "lower",
+        "shorts": "lower",
+        "dress": "overall",
+        "jumpsuit": "overall",
+        "overall": "overall",
+        "overalls": "overall",
+        "romper": "overall",
+        "salopette": "overall",
+        "salopeit": "overall",
+        "سالوبيت": "overall",
+        "abaya": "overall",
+        "abayas": "overall",
+        "عباية": "overall",
+        "عبايات": "overall",
+        "galabeya": "overall",
+        "galabiya": "overall",
+        "jellabiya": "overall",
+        "t-shirt": "upper",
+        "tee": "upper",
+        "tshirt": "upper",
+        "jersey": "upper",
+        "sports-shirt": "upper",
+        "sport-shirt": "upper",
+        "hockey-jersey": "upper",
+        "football-jersey": "upper",
+        "basketball-jersey": "upper",
+        "tank-top": "upper",
+        "tanktop": "upper",
+        "shirt": "upper",
+        "chemise": "upper",
+        "blouse": "upper",
+        "hoodie": "upper",
+        "jacket": "upper"
+    };
+
+    const categoryToArea = (value, option = null) =>
+        option?.dataset.area || categoryAreaMap[normalizeCatalogValue(value)] || "";
+
+    const isOptionAllowedForTarget = (option, targetBody) => {
+        if (!option?.value || !targetBody) {
+            return true;
+        }
+
+        const audiences = (option.dataset.audience || "")
+            .split(/\s+/)
+            .map(normalizeTargetBody)
+            .filter(Boolean);
+
+        return audiences.length === 0 || audiences.includes(targetBody);
+    };
+
+    const syncCategoryCatalog = (targetSelect, categorySelect, areaSelect) => {
+        if (!categorySelect) {
+            return "";
+        }
+
+        const targetBody = normalizeTargetBody(targetSelect?.value);
+        let selectedOptionAllowed = true;
+        let firstAllowedOption = null;
+        let preferredOption = null;
+        const preferredByTarget = {
+            male: "T-Shirt",
+            female: "Blouse",
+            child: "T-Shirt"
+        }[targetBody];
+
+        Array.from(categorySelect.options).forEach(option => {
+            if (!option.value) {
+                return;
+            }
+
+            const allowed = isOptionAllowedForTarget(option, targetBody);
+            option.hidden = !allowed;
+            option.disabled = !allowed;
+
+            if (allowed && !firstAllowedOption) {
+                firstAllowedOption = option;
+            }
+
+            if (allowed && preferredByTarget && option.value === preferredByTarget) {
+                preferredOption = option;
+            }
+
+            if (option.selected && !allowed) {
+                selectedOptionAllowed = false;
+            }
+        });
+
+        if ((!categorySelect.value || !selectedOptionAllowed) && (preferredOption || firstAllowedOption)) {
+            categorySelect.value = (preferredOption || firstAllowedOption).value;
+        }
+
+        const selected = categorySelect.selectedOptions?.[0] || null;
+        const mappedArea = categoryToArea(categorySelect.value, selected);
+        if (mappedArea && areaSelect) {
+            areaSelect.value = mappedArea;
+            areaSelect.dataset.autoArea = mappedArea;
+
+            Array.from(areaSelect.options).forEach(option => {
+                const isAreaOption = Boolean(option.value);
+                option.hidden = isAreaOption && option.value !== mappedArea;
+                option.disabled = isAreaOption && option.value !== mappedArea;
+            });
+        }
+
+        return mappedArea;
+    };
+
+    const form = document.querySelector("[data-tryon-form]");
 
     if (form) {
         const isPublicLive = form.dataset.publicLive === "true";
         const initialClothingUrl = (form.dataset.initialClothingUrl || "").trim();
+        const livePreviewEnabled = form.dataset.livePreview === "true";
         const shouldAutoStartCamera = form.dataset.autoCamera === "true";
         const sourceButtons = form.querySelectorAll("[data-source-trigger]");
         const cameraSection = form.querySelector("[data-camera-section]");
@@ -40,6 +403,7 @@
         const fileCameraClose = form.querySelector("[data-file-camera-close]");
         const imageData = form.querySelector("[data-image-data]");
         const clothingImageData = form.querySelector("[data-clothing-image-data]");
+        const poseLandmarksData = form.querySelector("[data-pose-landmarks]");
         const poseUpload = form.querySelector("[data-pose-upload]");
         const clothingUpload = form.querySelector("[data-clothing-upload]");
         const poseUploadTriggers = form.querySelectorAll("[data-pose-upload-trigger]");
@@ -48,6 +412,7 @@
         const poseLinkTriggers = form.querySelectorAll("[data-pose-link-trigger]");
         const liveClothingUploadTriggers = form.querySelectorAll("[data-live-clothing-upload-trigger]");
         const liveClothingLinkTriggers = form.querySelectorAll("[data-live-clothing-link-trigger]");
+        const liveAiFitTrigger = form.querySelector("[data-live-ai-fit]");
         const driveOpenTriggers = form.querySelectorAll("[data-drive-open]");
         const storeOpenTriggers = form.querySelectorAll("[data-store-open]");
         const clothingLinkPanel = form.querySelector("[data-clothing-link-panel]");
@@ -57,13 +422,16 @@
         const clothingUrl = form.querySelector("[data-clothing-url]");
         const liveClothingUrl = form.querySelector("[data-live-clothing-url]");
         const posePreview = form.querySelector("[data-pose-preview]");
+        const poseOverlayCanvas = form.querySelector("[data-pose-overlay]");
         const poseEmpty = form.querySelector("[data-pose-empty]");
         const clothingPreview = form.querySelector("[data-clothing-preview]");
         const clothingEmpty = form.querySelector("[data-clothing-empty]");
+        const targetBody = form.querySelector("[data-target-body]");
         const clothingCategory = form.querySelector("[data-clothing-category]");
         const garmentArea = form.querySelector("[data-garment-area]");
-        const submitButton = form.querySelector("[type='submit']");
+        const garmentView = form.querySelector("[data-garment-view]");
         const submitRow = form.querySelector("[data-submit-row]");
+        const submitButton = submitRow?.querySelector("[type='submit']") || form.querySelector("[type='submit']");
         const poseDebugToggle = form.querySelector("[data-pose-debug-toggle]");
         const fittingDebugOutput = form.querySelector("[data-fitting-debug-output]");
         let stream = null;
@@ -85,6 +453,7 @@
         let trackingStartedAt = 0;
         let smoothedFit = null;
         let bodyTrackingFailed = false;
+        let isSubmittingLiveAiFit = false;
         const liveFitAi = window.LiveFitAI || null;
         const liveFitConfig = liveFitAi?.config || {
             trackingIntervalMs: 90,
@@ -219,37 +588,16 @@
             }
         };
 
-        const categoryToArea = (value) => {
-            const category = (value || "").trim().toLowerCase();
-            return {
-                "pants": "lower",
-                "shorts": "lower",
-                "short": "lower",
-                "trousers": "lower",
-                "dress": "overall",
-                "galabeya": "overall",
-                "galabiya": "overall",
-                "jellabiya": "overall",
-                "t-shirt": "upper",
-                "shirt": "upper",
-                "hoodie": "upper",
-                "jacket": "upper"
-            }[category] || "";
-        };
-
         const syncGarmentAreaFromCategory = () => {
-            const mappedArea = categoryToArea(clothingCategory?.value);
-
-            if (mappedArea && garmentArea) {
-                garmentArea.value = mappedArea;
-                garmentArea.dataset.autoArea = mappedArea;
-            }
-
-            return mappedArea;
+            return syncCategoryCatalog(targetBody, clothingCategory, garmentArea);
         };
 
         const getGarmentArea = () => syncGarmentAreaFromCategory() || garmentArea?.value || "upper";
         const getGarmentCategory = () => (clothingCategory?.value || "").trim();
+        const getGarmentView = () => {
+            const value = (garmentView?.value || "front").trim().toLowerCase();
+            return value === "back" ? "back" : "front";
+        };
 
         const prepareOverlayCanvas = () => {
             const videoWidth = video.videoWidth || 0;
@@ -374,22 +722,23 @@
                     ? mapLandmarkToCanvas(landmark, displayWidth, displayHeight)
                     : estimate;
             };
-            const leftElbow = mapOrEstimate(13, {
+            const mirroredIndex = (normalIndex, mirroredIndex) => isMirroredPose ? mirroredIndex : normalIndex;
+            const leftElbow = mapOrEstimate(mirroredIndex(13, 14), {
                 x: leftShoulder.x - (shoulderDistance * 0.22),
                 y: leftShoulder.y + (torsoDistance * 0.48),
                 visibility: 0.30
             });
-            const rightElbow = mapOrEstimate(14, {
+            const rightElbow = mapOrEstimate(mirroredIndex(14, 13), {
                 x: rightShoulder.x + (shoulderDistance * 0.22),
                 y: rightShoulder.y + (torsoDistance * 0.48),
                 visibility: 0.30
             });
-            const leftWrist = mapOrEstimate(15, {
+            const leftWrist = mapOrEstimate(mirroredIndex(15, 16), {
                 x: leftElbow.x - (shoulderDistance * 0.16),
                 y: leftElbow.y + (torsoDistance * 0.54),
                 visibility: 0.25
             });
-            const rightWrist = mapOrEstimate(16, {
+            const rightWrist = mapOrEstimate(mirroredIndex(16, 15), {
                 x: rightElbow.x + (shoulderDistance * 0.16),
                 y: rightElbow.y + (torsoDistance * 0.54),
                 visibility: 0.25
@@ -404,15 +753,15 @@
                 y: rightHip.y + (torsoDistance * 0.88),
                 visibility: 0.30
             };
-            const leftKnee = mapOrEstimate(25, leftKneeEstimate);
-            const rightKnee = mapOrEstimate(26, rightKneeEstimate);
+            const leftKnee = mapOrEstimate(mirroredIndex(25, 26), leftKneeEstimate);
+            const rightKnee = mapOrEstimate(mirroredIndex(26, 25), rightKneeEstimate);
             const kneeCenter = midpoint(leftKnee, rightKnee);
-            const leftAnkle = mapOrEstimate(27, {
+            const leftAnkle = mapOrEstimate(mirroredIndex(27, 28), {
                 x: leftKnee.x + ((leftKnee.x - leftHip.x) * 0.24),
                 y: leftKnee.y + (torsoDistance * 0.92),
                 visibility: 0.25
             });
-            const rightAnkle = mapOrEstimate(28, {
+            const rightAnkle = mapOrEstimate(mirroredIndex(28, 27), {
                 x: rightKnee.x + ((rightKnee.x - rightHip.x) * 0.24),
                 y: rightKnee.y + (torsoDistance * 0.92),
                 visibility: 0.25
@@ -469,6 +818,7 @@
             const rawFit = {
                 area: fitProfile.area || area,
                 category: liveFitAi?.normalizeCategory?.(category) || category.toLowerCase(),
+                viewDirection: getGarmentView(),
                 profile: fitProfile,
                 leftShoulder,
                 rightShoulder,
@@ -500,7 +850,10 @@
             };
             const targetFit = liveFitAi?.normalizeFit?.(rawFit, displayWidth, displayHeight) || rawFit;
 
-            if (!smoothedFit || smoothedFit.category !== targetFit.category || smoothedFit.area !== targetFit.area) {
+            if (!smoothedFit ||
+                smoothedFit.category !== targetFit.category ||
+                smoothedFit.area !== targetFit.area ||
+                smoothedFit.viewDirection !== targetFit.viewDirection) {
                 smoothedFit = targetFit;
                 return targetFit;
             }
@@ -571,6 +924,7 @@
             }
 
             const profile = fit.profile || {};
+            const isBackView = fit.viewDirection === "back";
             const downUnit = normalizeVector(fit.downUnit || {
                 x: -Math.sin(fit.angle || 0),
                 y: Math.cos(fit.angle || 0)
@@ -585,12 +939,19 @@
                     x: fit.neck.x + (downUnit.x * drawHeight * (0.5 - collarY)),
                     y: fit.neck.y + (downUnit.y * drawHeight * (0.5 - collarY))
                 }
+                : fit.area === "lower" && fit.kneeCenter && profile.kneeY
+                    ? {
+                        x: fit.kneeCenter.x - (downUnit.x * drawHeight * (profile.kneeY - 0.5)),
+                        y: fit.kneeCenter.y - (downUnit.y * drawHeight * (profile.kneeY - 0.5))
+                    }
                 : fit.center;
 
             if (profile.frontPanelOnly && fit.area === "upper") {
                 const imageWidth = garmentImage.naturalWidth || garmentImage.width;
                 const imageHeight = garmentImage.naturalHeight || garmentImage.height;
-                const crop = profile.frontCrop || { x: 0.18, y: 0.08, width: 0.64, height: 0.84 };
+                const crop = (isBackView && profile.backCrop) ||
+                    profile.frontCrop ||
+                    { x: 0.18, y: 0.08, width: 0.64, height: 0.84 };
                 const sx = imageWidth * crop.x;
                 const sy = imageHeight * crop.y;
                 const sw = imageWidth * crop.width;
@@ -721,11 +1082,13 @@
             const sleeveLengthFactor = profile.sleeveLengthFactor ?? 0.82;
             const sleeveWidthFactor = profile.sleeveWidthFactor ?? 0.18;
             const shoulderOffset = profile.sleeveShoulderOffset ?? 0.02;
+            const sleeveMode = profile.sleeveMode || "short";
 
             const drawOneSleeve = (side) => {
                 const isLeft = side === "left";
                 const shoulder = isLeft ? fit.leftShoulder : fit.rightShoulder;
                 const elbow = isLeft ? fit.leftElbow : fit.rightElbow;
+                const wrist = isLeft ? fit.leftWrist : fit.rightWrist;
                 if (!shoulder || !elbow || (elbow.visibility ?? 1) < 0.22) {
                     return;
                 }
@@ -735,44 +1098,79 @@
                     : { x: shoulderUnit.x, y: shoulderUnit.y };
                 outward = normalizeVector(outward, isLeft ? { x: -1, y: 0 } : { x: 1, y: 0 });
 
-                const armVector = {
-                    x: elbow.x - shoulder.x,
-                    y: elbow.y - shoulder.y
-                };
                 const armFallback = normalizeVector({
                     x: (downUnit.x * 0.72) + (outward.x * 0.28),
                     y: (downUnit.y * 0.72) + (outward.y * 0.28)
                 }, downUnit);
-                const armUnit = normalizeVector(armVector, armFallback);
-                let armNormal = normalizeVector({ x: -armUnit.y, y: armUnit.x }, outward);
-                if (dot(armNormal, outward) < 0) {
-                    armNormal = { x: -armNormal.x, y: -armNormal.y };
-                }
 
-                const armDistance = Math.max(distance(shoulder, elbow), fit.shoulderDistance * 0.30);
-                const sleeveLength = Math.min(
-                    Math.max(armDistance * sleeveLengthFactor, fit.shoulderDistance * 0.24),
-                    fit.shoulderDistance * 0.68);
                 const startHalf = fit.shoulderDistance * sleeveWidthFactor;
-                const endHalf = startHalf * 0.68;
                 const startCenter = addPoint(
                     addPoint(shoulder, outward, fit.shoulderDistance * shoulderOffset),
                     downUnit,
                     fit.shoulderDistance * 0.035);
-                const endCenter = addPoint(startCenter, armUnit, sleeveLength);
 
-                const p0 = addPoint(startCenter, armNormal, startHalf);
-                const p1 = addPoint(startCenter, armNormal, -startHalf);
-                const p2 = addPoint(endCenter, armNormal, -endHalf);
-                const p3 = addPoint(endCenter, armNormal, endHalf);
-                const sourceRect = {
-                    sx: imageWidth * (isLeft ? 0.00 : 0.64),
-                    sy: imageHeight * 0.12,
-                    sw: imageWidth * 0.36,
-                    sh: imageHeight * 0.42
+                const drawSleeveSegment = (from, to, fromHalf, toHalf, sourceY, sourceHeight, minLength) => {
+                    const segmentVector = {
+                        x: to.x - from.x,
+                        y: to.y - from.y
+                    };
+                    const segmentUnit = normalizeVector(segmentVector, armFallback);
+                    let segmentNormal = normalizeVector({ x: -segmentUnit.y, y: segmentUnit.x }, outward);
+                    if (dot(segmentNormal, outward) < 0) {
+                        segmentNormal = { x: -segmentNormal.x, y: -segmentNormal.y };
+                    }
+
+                    const segmentDistance = Math.max(distance(from, to), minLength);
+                    const segmentEnd = addPoint(from, segmentUnit, segmentDistance);
+                    const p0 = addPoint(from, segmentNormal, fromHalf);
+                    const p1 = addPoint(from, segmentNormal, -fromHalf);
+                    const p2 = addPoint(segmentEnd, segmentNormal, -toHalf);
+                    const p3 = addPoint(segmentEnd, segmentNormal, toHalf);
+                    const sourceRect = {
+                        sx: imageWidth * (isLeft ? 0.00 : 0.64),
+                        sy: imageHeight * sourceY,
+                        sw: imageWidth * 0.36,
+                        sh: imageHeight * sourceHeight
+                    };
+
+                    drawImageInQuad(context, garmentImage, sourceRect, p0, p1, p2, p3, Math.min(alpha, 0.95));
                 };
 
-                drawImageInQuad(context, garmentImage, sourceRect, p0, p1, p2, p3, Math.min(alpha, 0.95));
+                if (sleeveMode === "long" && wrist && (wrist.visibility ?? 1) >= 0.18) {
+                    drawSleeveSegment(
+                        startCenter,
+                        elbow,
+                        startHalf,
+                        startHalf * 0.76,
+                        0.10,
+                        0.32,
+                        fit.shoulderDistance * 0.28);
+                    drawSleeveSegment(
+                        elbow,
+                        wrist,
+                        startHalf * 0.74,
+                        startHalf * 0.50,
+                        0.38,
+                        0.34,
+                        fit.shoulderDistance * 0.26);
+                    return;
+                }
+
+                const shoulderToElbow = distance(startCenter, elbow);
+                const shortEnd = addPoint(
+                    startCenter,
+                    normalizeVector({ x: elbow.x - startCenter.x, y: elbow.y - startCenter.y }, armFallback),
+                    Math.min(
+                        Math.max(shoulderToElbow * sleeveLengthFactor, fit.shoulderDistance * 0.24),
+                        fit.shoulderDistance * 0.78));
+                drawSleeveSegment(
+                    startCenter,
+                    shortEnd,
+                    startHalf,
+                    startHalf * 0.64,
+                    0.12,
+                    0.42,
+                    fit.shoulderDistance * 0.22);
             };
 
             drawOneSleeve("left");
@@ -892,6 +1290,7 @@
             const fallbackFit = {
                 area: fitProfile.area || area,
                 category: liveFitAi?.normalizeCategory?.(category) || category.toLowerCase(),
+                viewDirection: getGarmentView(),
                 profile: fitProfile,
                 leftShoulder: { x: (displayWidth / 2) - (shoulderDistance / 2), y: displayHeight * 0.31 },
                 rightShoulder: { x: (displayWidth / 2) + (shoulderDistance / 2), y: displayHeight * 0.31 },
@@ -958,7 +1357,7 @@
                 return;
             }
 
-            const label = fit.category || fit.area || "garment";
+            const label = `${fit.viewDirection === "back" ? "back" : "front"} ${fit.category || fit.area || "garment"}`;
             const text = `${label} ${Math.round(fit.width)} x ${Math.round(fit.height)} | shoulders ${Math.round(fit.shoulderDistance)} | torso ${Math.round(fit.torsoDistance)}`;
             fittingDebugOutput.textContent = text;
             console.debug("[try-on fit]", text, fit);
@@ -998,14 +1397,16 @@
             context.clearRect(0, 0, displayWidth, displayHeight);
 
             if (!videoWidth || !videoHeight || !liveGarmentImage) {
+                if (liveGarmentUrl) {
+                    cameraStatus.textContent = "Garment ready - press AI Fit";
+                }
                 liveOverlayFrame = requestAnimationFrame(drawLiveGarment);
                 return;
             }
 
             processBodyTrackingLoop();
             const poseFit = calculatePoseFit(displayWidth, displayHeight);
-            const shouldUseFallback = bodyTrackingFailed &&
-                trackingStartedAt &&
+            const shouldUseFallback = trackingStartedAt &&
                 performance.now() - trackingStartedAt > liveFitConfig.fallbackAfterMs;
             const fit = poseFit || smoothedFit ||
                 (shouldUseFallback ? calculateFallbackFit(displayWidth, displayHeight) : null);
@@ -1017,7 +1418,9 @@
                 drawPoseDebug(context, fit);
                 cameraStatus.textContent = poseFit
                     ? "Body tracked - live fit running"
-                    : "Tracking paused - holding last fit";
+                    : bodyTrackingFailed
+                        ? "Basic live fit running"
+                        : "Tracking fallback - keep shoulders visible";
             } else {
                 cameraStatus.textContent = "Step back until shoulders and hips are visible";
             }
@@ -1064,11 +1467,13 @@
             };
 
             image.onerror = () => {
-                liveGarmentOverlay.src = liveGarmentUrl;
-                liveGarmentOverlay.classList.remove("d-none");
+                if (allowCanvasDraw) {
+                    liveGarmentOverlay.src = liveGarmentUrl;
+                    liveGarmentOverlay.classList.remove("d-none");
+                }
                 cameraStatus.textContent = allowCanvasDraw
                     ? "Preview loaded with basic overlay"
-                    : "Preview loaded from image link";
+                    : "Garment link ready - press AI Fit";
             };
 
             image.src = src;
@@ -1221,7 +1626,7 @@
             }
         });
 
-        fileCameraCapture?.addEventListener("click", () => {
+        fileCameraCapture?.addEventListener("click", async () => {
             if (!fileCameraFeed?.videoWidth || !fileCameraFeed?.videoHeight || !fileCameraCanvas) {
                 window.alert("Open the camera first, then capture the photo.");
                 return;
@@ -1238,6 +1643,7 @@
                 poseUrl.value = "";
             }
             setPreviewState("[data-pose-preview]", "[data-pose-empty]", imageData.value);
+            await detectAndStorePose(imageData.value, posePreview, poseOverlayCanvas, poseLandmarksData);
             fileCameraPanel?.classList.add("d-none");
             stopFileCamera();
         });
@@ -1271,6 +1677,7 @@
 
         poseUpload?.addEventListener("change", async (event) => {
             imageData.value = "";
+            clearPoseOverlay(poseOverlayCanvas, poseLandmarksData);
             const file = event.target.files?.[0];
             showPreview(file, "[data-pose-preview]", "[data-pose-empty]");
 
@@ -1287,10 +1694,14 @@
                 });
 
             await poseResizePromise;
+            if (imageData.value) {
+                await detectAndStorePose(imageData.value, posePreview, poseOverlayCanvas, poseLandmarksData);
+            }
         });
 
-        poseUrl?.addEventListener("input", () => {
+        poseUrl?.addEventListener("input", async () => {
             imageData.value = "";
+            clearPoseOverlay(poseOverlayCanvas, poseLandmarksData);
             poseUpload.value = "";
             const url = poseUrl.value.trim();
 
@@ -1300,6 +1711,7 @@
             }
 
             setPreviewState("[data-pose-preview]", "[data-pose-empty]", url);
+            await detectAndStorePose(url, posePreview, poseOverlayCanvas, poseLandmarksData);
         });
 
         clothingUpload?.addEventListener("change", async (event) => {
@@ -1335,12 +1747,19 @@
             }
 
             setPreviewState("[data-clothing-preview]", "[data-clothing-empty]", url);
-            loadLiveGarment(url, false);
+            loadLiveGarment(url, true);
         });
 
         liveClothingUrl?.addEventListener("input", () => {
             const url = liveClothingUrl.value.trim();
-            loadLiveGarment(url, false);
+            if (clothingUrl) {
+                clothingUrl.value = url;
+            }
+            if (clothingUpload) {
+                clothingUpload.value = "";
+            }
+            clothingImageData.value = "";
+            loadLiveGarment(url, true);
         });
 
         clothingCategory?.addEventListener("change", () => {
@@ -1348,6 +1767,48 @@
             if (syncGarmentAreaFromCategory()) {
                 startLiveOverlay();
             }
+        });
+
+        targetBody?.addEventListener("change", () => {
+            smoothedFit = null;
+            syncGarmentAreaFromCategory();
+            startLiveOverlay();
+        });
+
+        garmentView?.addEventListener("change", () => {
+            smoothedFit = null;
+            startLiveOverlay();
+        });
+
+        liveAiFitTrigger?.addEventListener("click", async () => {
+            syncGarmentAreaFromCategory();
+
+            if (!captureCameraFrame()) {
+                window.alert("Open the camera first, then try AI Fit.");
+                return;
+            }
+
+            await Promise.allSettled([clothingResizePromise]);
+            const hasClothing = Boolean(clothingImageData.value || clothingUpload?.files?.length || clothingUrl?.value.trim());
+
+            if (!hasClothing) {
+                window.alert("Choose a clothing image or link first.");
+                return;
+            }
+
+            if (latestPoseLandmarks?.length && poseLandmarksData) {
+                poseLandmarksData.value = serializePoseLandmarks(
+                    latestPoseLandmarks,
+                    video.videoWidth || canvas.width || 1,
+                    video.videoHeight || canvas.height || 1);
+            } else {
+                await detectAndStorePose(imageData.value, posePreview, poseOverlayCanvas, poseLandmarksData);
+            }
+
+            isSubmittingLiveAiFit = true;
+            liveAiFitTrigger.setAttribute("disabled", "disabled");
+            submitButton?.setAttribute("disabled", "disabled");
+            form.requestSubmit(submitButton || undefined);
         });
 
         form.addEventListener("submit", async (event) => {
@@ -1360,9 +1821,9 @@
 
             const filesPanelIsActive = form.querySelector("[data-studio-tab-panel='files']")?.classList.contains("is-active");
 
-            if (!filesPanelIsActive) {
+            if (!filesPanelIsActive && !isSubmittingLiveAiFit) {
                 event.preventDefault();
-                window.alert("Open Files, choose a model image and clothing image, then generate the final try-on.");
+                window.alert("Open Files, choose a model image and clothing image, then generate the final try-on, or use AI Fit from Live.");
                 return;
             }
 
@@ -1376,6 +1837,8 @@
                 const hasClothing = Boolean(clothingImageData.value || clothingUpload?.files?.length || clothingUrl?.value.trim());
 
                 if (!hasPose || !hasClothing) {
+                    isSubmittingLiveAiFit = false;
+                    liveAiFitTrigger?.removeAttribute("disabled");
                     submitButton?.removeAttribute("disabled");
                     window.alert("Choose both the model image and the clothing image first.");
                     return;
@@ -1383,7 +1846,7 @@
 
                 isSubmittingAfterResize = true;
                 submitButton?.removeAttribute("disabled");
-                form.requestSubmit();
+                form.requestSubmit(submitButton || undefined);
                 return;
             }
 
@@ -1414,7 +1877,7 @@
             }
 
             setPreviewState("[data-clothing-preview]", "[data-clothing-empty]", initialClothingUrl);
-            loadLiveGarment(initialClothingUrl, false);
+            loadLiveGarment(initialClothingUrl, true);
         }
 
         if (isPublicLive || shouldAutoStartCamera) {
@@ -1423,6 +1886,7 @@
     }
 
     document.querySelectorAll("[data-upload-form]").forEach(uploadForm => {
+        const targetBody = uploadForm.querySelector("[data-upload-target-body]");
         const category = uploadForm.querySelector("[data-upload-clothing-category]");
         const garmentArea = uploadForm.querySelector("[data-upload-garment-area]");
         const submitButton = uploadForm.querySelector("[data-upload-submit]");
@@ -1433,23 +1897,16 @@
         const uploadCameraOpen = uploadForm.querySelector("[data-upload-camera-open]");
         const uploadCameraCapture = uploadForm.querySelector("[data-upload-camera-capture]");
         const uploadCameraClose = uploadForm.querySelector("[data-upload-camera-close]");
+        const uploadCameraCountdown = uploadForm.querySelector("[data-upload-camera-countdown]");
         const garmentFileInput = uploadForm.querySelector("[data-upload-garment-file]");
         const garmentFileOpen = uploadForm.querySelector("[data-upload-garment-file-open]");
-        const colabApiUrlInput = uploadForm.querySelector("[data-colab-api-url]");
+        const uploadPoseLandmarks = uploadForm.querySelector("[data-upload-pose-landmarks]");
+        const uploadPoseOverlay = uploadForm.querySelector("[data-upload-pose-overlay]");
+        const uploadModelPreview = uploadForm.querySelector('[data-upload-preview="model"]');
         let uploadCameraStream = null;
-        const areaMap = {
-            "pants": "lower",
-            "shorts": "lower",
-            "short": "lower",
-            "dress": "overall",
-            "galabeya": "overall",
-            "galabiya": "overall",
-            "jellabiya": "overall",
-            "t-shirt": "upper",
-            "shirt": "upper",
-            "hoodie": "upper",
-            "jacket": "upper"
-        };
+        let uploadPosePromise = Promise.resolve("");
+        let isSubmittingAfterUploadPose = false;
+        let isUploadCountdownRunning = false;
 
         uploadForm.querySelectorAll("[data-upload-preview-input]").forEach(input => {
             input.addEventListener("change", () => {
@@ -1464,6 +1921,9 @@
                 if (!file) {
                     preview.classList.add("d-none");
                     preview.removeAttribute("src");
+                    if (previewName === "model") {
+                        clearPoseOverlay(uploadPoseOverlay, uploadPoseLandmarks);
+                    }
                     return;
                 }
 
@@ -1472,6 +1932,7 @@
 
                 if (previewName === "model" && modelCaptureInput) {
                     modelCaptureInput.value = "";
+                    uploadPosePromise = detectAndStorePose(preview.src, preview, uploadPoseOverlay, uploadPoseLandmarks);
                 }
             });
         });
@@ -1480,23 +1941,28 @@
             garmentFileInput?.click();
         });
 
-        if (colabApiUrlInput) {
-            const savedColabUrl = localStorage.getItem("virtualTryOnColabApiUrl") || "";
-            if (savedColabUrl && !colabApiUrlInput.value) {
-                colabApiUrlInput.value = savedColabUrl;
-            }
-
-            colabApiUrlInput.addEventListener("input", () => {
-                localStorage.setItem("virtualTryOnColabApiUrl", colabApiUrlInput.value.trim());
-            });
-        }
-
         const stopUploadCamera = () => {
+            uploadCameraCountdown?.classList.add("d-none");
+            isUploadCountdownRunning = false;
             uploadCameraStream?.getTracks().forEach(track => track.stop());
             uploadCameraStream = null;
             if (uploadCameraFeed) {
                 uploadCameraFeed.srcObject = null;
             }
+        };
+
+        const runUploadCountdown = async () => {
+            if (!uploadCameraCountdown) {
+                await new Promise(resolve => window.setTimeout(resolve, 2000));
+                return;
+            }
+
+            uploadCameraCountdown.classList.remove("d-none");
+            for (const value of ["2", "1"]) {
+                uploadCameraCountdown.textContent = value;
+                await new Promise(resolve => window.setTimeout(resolve, 1000));
+            }
+            uploadCameraCountdown.classList.add("d-none");
         };
 
         uploadCameraOpen?.addEventListener("click", async () => {
@@ -1521,8 +1987,27 @@
             }
         });
 
-        uploadCameraCapture?.addEventListener("click", () => {
+        uploadCameraCapture?.addEventListener("click", async () => {
+            if (isUploadCountdownRunning) {
+                return;
+            }
+
             if (!uploadCameraFeed || !uploadCameraCanvas || !modelCaptureInput) {
+                return;
+            }
+
+            if (!uploadCameraStream || !uploadCameraFeed.videoWidth || !uploadCameraFeed.videoHeight) {
+                window.alert("Open the camera first, then capture the photo.");
+                return;
+            }
+
+            isUploadCountdownRunning = true;
+            uploadCameraCapture.setAttribute("disabled", "disabled");
+            await runUploadCountdown();
+            uploadCameraCapture.removeAttribute("disabled");
+            isUploadCountdownRunning = false;
+
+            if (!uploadCameraStream || !uploadCameraFeed.videoWidth || !uploadCameraFeed.videoHeight) {
                 return;
             }
 
@@ -1546,6 +2031,8 @@
                 modelFileInput.value = "";
             }
 
+            uploadPosePromise = detectAndStorePose(dataUrl, preview, uploadPoseOverlay, uploadPoseLandmarks);
+            await uploadPosePromise;
             stopUploadCamera();
             uploadCameraPanel?.classList.add("d-none");
         });
@@ -1556,15 +2043,24 @@
         });
 
         category?.addEventListener("change", () => {
-            const mappedArea = areaMap[(category.value || "").trim().toLowerCase()];
-            if (mappedArea && garmentArea) {
-                garmentArea.value = mappedArea;
-            }
+            syncCategoryCatalog(targetBody, category, garmentArea);
         });
 
-        uploadForm.addEventListener("submit", () => {
-            if (colabApiUrlInput?.value) {
-                localStorage.setItem("virtualTryOnColabApiUrl", colabApiUrlInput.value.trim());
+        targetBody?.addEventListener("change", () => {
+            syncCategoryCatalog(targetBody, category, garmentArea);
+        });
+
+        syncCategoryCatalog(targetBody, category, garmentArea);
+
+        uploadForm.addEventListener("submit", async (event) => {
+            syncCategoryCatalog(targetBody, category, garmentArea);
+
+            if (!isSubmittingAfterUploadPose) {
+                event.preventDefault();
+                await uploadPosePromise;
+                isSubmittingAfterUploadPose = true;
+                uploadForm.requestSubmit(event.submitter || submitButton || undefined);
+                return;
             }
 
             submitButton?.setAttribute("disabled", "disabled");

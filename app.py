@@ -19,6 +19,9 @@ MODEL_REPO_ID = os.getenv("CATVTON_MODEL_REPO_ID", "Adelgamal1/virtual-fitting-r
 
 
 def find_project_bundle(project_root: Path) -> Path:
+    if (project_root / "model" / "pipeline.py").exists():
+        return project_root
+
     for candidate in project_root.iterdir():
         if candidate.is_dir() and (candidate / "model" / "pipeline.py").exists():
             return candidate
@@ -28,6 +31,10 @@ def find_project_bundle(project_root: Path) -> Path:
 
 
 def find_nested_directory(project_root: Path, directory_name: str) -> Path:
+    direct = project_root / directory_name
+    if direct.is_dir():
+        return direct
+
     matches = sorted(
         [candidate for candidate in project_root.rglob(directory_name) if candidate.is_dir()],
         key=lambda path: str(path),
@@ -195,10 +202,11 @@ def run_tryon(
     if person_image is None or cloth_image is None:
         raise gr.Error("Please upload both the person image and the clothing image.")
 
-    runtime = get_runtime()
     person_image = person_image.convert("RGB")
     cloth_image = cloth_image.convert("RGB")
     category = normalize_category(garment_description)
+
+    runtime = get_runtime()
 
     if auto_mask and runtime["masker"] is not None:
         mask_result = runtime["masker"](person_image, mask_type=category)
