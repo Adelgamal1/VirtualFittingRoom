@@ -8,7 +8,7 @@ import gradio as gr
 import spaces
 import torch
 from huggingface_hub import snapshot_download
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
 SPACE_ROOT = Path(__file__).resolve().parent
@@ -378,6 +378,9 @@ def run_tryon(
     if auto_mask and runtime["masker"] is not None:
         mask_result = runtime["masker"](person_image, mask_type=category)
         mask = mask_result["mask"]
+        if category == "upper" and pose_landmarks_data:
+            pose_mask = build_fallback_mask(person_image, category, pose_landmarks_data)
+            mask = ImageChops.lighter(mask.convert("L"), pose_mask.convert("L"))
     else:
         mask = build_fallback_mask(person_image, category, pose_landmarks_data)
     mask = protect_identity_regions(mask, category, pose_landmarks_data)
