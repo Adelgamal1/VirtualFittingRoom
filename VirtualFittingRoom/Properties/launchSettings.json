@@ -1,0 +1,34 @@
+﻿{
+  "iisSettings": {
+    "windowsAuthentication": false,
+    "anonymousAuthentication": true,
+    "iisExpress": {
+      "applicationUrl": "http://localhost:9515",
+      "sslPort": 44363
+    }
+  },
+  "profiles": {
+    "VirtualFittingRoom": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "applicationUrl": "http://localhost:5001",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "VirtualTryOn__Mode": "Preview",
+        "VirtualTryOn__HuggingFaceSpaceUrl": "https://YOUR_USERNAME-YOUR_SPACE_NAME.hf.space",
+        "VirtualTryOn__HuggingFaceApiName": "tryon"
+      }
+    },
+    "IIS Express": {
+      "commandName": "IISExpress",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "VirtualTryOn__Mode": "Preview",
+        "VirtualTryOn__HuggingFaceSpaceUrl": "https://YOUR_USERNAME-YOUR_SPACE_NAME.hf.space",
+        "VirtualTryOn__HuggingFaceApiName": "tryon"
+      }
+    }
+  }
+}

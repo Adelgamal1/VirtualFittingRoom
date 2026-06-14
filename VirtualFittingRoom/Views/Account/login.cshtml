@@ -1,0 +1,84 @@
+@{
+    ViewData["Title"] = "Login";
+}
+
+<div class="auth-showcase auth-showcase-login auth-visual-shell">
+    <section class="auth-copy">
+        <span class="eyebrow">Virtual Fitting Room</span>
+        <h1>Pick up your fitting sessions where you left them.</h1>
+        <p>Log in to access customer uploads, saved history, and the camera-ready try-on studio.</p>
+    </section>
+
+    <form asp-action="Login" method="post" class="auth-card auth-glass-card">
+        <span class="auth-kicker">Sign In</span>
+        <div asp-validation-summary="All" class="text-danger small mb-3"></div>
+
+        <div class="auth-field">
+            <label class="form-label">Email</label>
+            <div class="auth-input-wrap">
+                <i class="bi bi-envelope"></i>
+                <input name="Email" type="email" class="form-control" placeholder="name@example.com" required />
+            </div>
+        </div>
+
+        <div class="auth-field">
+            <label class="form-label">Password</label>
+            <div class="password-field auth-input-wrap">
+                <i class="bi bi-lock"></i>
+                <input name="Password"
+                       type="password"
+                       class="form-control password-input"
+                       placeholder="Enter your password"
+                       autocomplete="current-password"
+                       required />
+                <button type="button" class="password-toggle" data-password-toggle aria-label="Show password">
+                    <i class="bi bi-eye"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="text-end mb-4">
+            <a asp-action="ForgotPassword" class="inline-link">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="btn btn-brand w-100">Sign In</button>
+
+        <div class="social-auth">
+            <div class="social-divider"><span>Or continue with</span></div>
+            <div class="social-buttons" aria-label="Social sign in options">
+                <a asp-controller="Account"
+                   asp-action="ExternalLogin"
+                   asp-route-provider="Google"
+                   asp-route-returnUrl="/TryOn"
+                   class="social-btn google"
+                   aria-label="Continue with Google">
+                    <i class="bi bi-google"></i>
+                    <span>Google</span>
+                </a>
+                <a asp-controller="Account"
+                   asp-action="ExternalLogin"
+                   asp-route-provider="Facebook"
+                   asp-route-returnUrl="/TryOn"
+                   class="social-btn facebook"
+                   aria-label="Continue with Facebook">
+                    <i class="bi bi-facebook"></i>
+                    <span>Facebook</span>
+                </a>
+                <a asp-controller="Account"
+                   asp-action="ExternalLogin"
+                   asp-route-provider="Apple"
+                   asp-route-returnUrl="/TryOn"
+                   class="social-btn apple"
+                   aria-label="Continue with iCloud">
+                    <i class="bi bi-apple"></i>
+                    <span>Apple</span>
+                </a>
+            </div>
+        </div>
+
+        <p class="auth-switch">
+            New here?
+            <a asp-controller="Registration" asp-action="Index" class="inline-link">Create account</a>
+        </p>
+    </form>
+</div>

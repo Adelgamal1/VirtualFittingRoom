@@ -1,0 +1,25 @@
+@{
+    ViewData["Title"] = "Rate Session";
+}
+
+<section class="page-heading narrow">
+    <span class="eyebrow">Review</span>
+    <h1>Your fitting result</h1>
+    <p>Check the generated image, then save a quick quality rating for this session.</p>
+</section>
+
+<section class="result-review-card">
+    <img src="@ViewBag.ImageUrl"
+         alt="Generated virtual fitting result"
+         class="result-review-image" />
+</section>
+
+<form asp-action="Measure" method="post" class="rating-card rating-card-under-result">
+    <input type="hidden" name="imageId" value="@ViewBag.ImageId" />
+
+    <h2>Rate this result</h2>
+    <button name="Rating" value="Bad" class="btn btn-danger-soft w-100">Bad</button>
+    <button name="Rating" value="Good" class="btn btn-ghost w-100">Good</button>
+    <button name="Rating" value="Very Good" class="btn btn-ghost w-100">Very Good</button>
+    <button name="Rating" value="Excellent" class="btn btn-brand w-100">Excellent</button>
+</form>

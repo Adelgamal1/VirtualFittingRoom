@@ -1,0 +1,139 @@
+@{
+    ViewData["Title"] = "Upload Try-On";
+    var user = ViewBag.UserProfile as VirtualFittingRoom.Models.UserMeasurement;
+}
+
+<section class="upload-workspace">
+    <header class="upload-header">
+        <div>
+            <span class="eyebrow">AI Try-On</span>
+            <h1>Upload or capture a model photo</h1>
+            <p>Upload the model image directly, or take a still camera shot with a short countdown, then choose the clothing image.</p>
+        </div>
+        <a class="btn btn-ghost" asp-controller="TryOn" asp-action="History">
+            <i class="bi bi-clock-history"></i>
+            History
+        </a>
+    </header>
+
+    <form asp-controller="TryOn"
+          asp-action="StartUploadSession"
+          method="post"
+          enctype="multipart/form-data"
+          class="upload-form"
+          data-upload-form>
+        <div asp-validation-summary="All" class="text-danger small"></div>
+        <input type="hidden" name="modelImageData" data-upload-model-capture />
+        <input type="hidden" name="poseLandmarksData" data-upload-pose-landmarks />
+
+        <div class="upload-grid">
+            <label class="upload-drop">
+                <input type="file" name="modelImageFile" accept="image/*" data-upload-preview-input="model" />
+                <span class="upload-drop-icon"><i class="bi bi-person-square"></i></span>
+                <strong>Model image</strong>
+                <small>Upload a clear full-body or half-body photo, or capture one below.</small>
+                <img alt="Model preview" class="upload-preview d-none" data-upload-preview="model" />
+                <canvas class="upload-pose-overlay d-none" data-upload-pose-overlay></canvas>
+            </label>
+
+            <div class="upload-drop">
+                <input type="file" name="garmentImageFile" accept="image/*" class="upload-hidden-input" data-upload-preview-input="garment" data-upload-garment-file />
+                <span class="upload-drop-icon"><i class="bi bi-bag"></i></span>
+                <strong>Clothing image</strong>
+                <small>Upload a front-facing clothing image from your device.</small>
+                <button type="button" class="btn btn-ghost upload-file-button" data-upload-garment-file-open>
+                    <i class="bi bi-folder2-open"></i>
+                    Upload Clothing
+                </button>
+                <img alt="Clothing preview" class="upload-preview d-none" data-upload-preview="garment" />
+            </div>
+        </div>
+
+        <div class="upload-camera-tools">
+            <button type="button" class="btn btn-ghost" data-upload-camera-open>
+                <i class="bi bi-camera-video"></i>
+                Capture model photo
+            </button>
+            <div class="upload-camera-panel d-none" data-upload-camera-panel>
+                <div class="upload-camera-frame">
+                    <video autoplay playsinline muted data-upload-camera-feed></video>
+                    <canvas data-upload-camera-canvas></canvas>
+                    <div class="upload-camera-countdown d-none" data-upload-camera-countdown>2</div>
+                </div>
+                <div class="upload-camera-actions">
+                    <button type="button" class="btn btn-brand" data-upload-camera-capture>
+                        <i class="bi bi-camera"></i>
+                        Capture in 2s
+                    </button>
+                    <button type="button" class="btn btn-ghost" data-upload-camera-close>
+                        <i class="bi bi-x-lg"></i>
+                        Close Camera
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="upload-options">
+            <label>
+                <span>Target body</span>
+                <select name="Gender" class="form-select" data-upload-target-body required>
+                    <option value="">Select target</option>
+                    <option value="Male" selected="@(user?.Gender == "Male")">Male</option>
+                    <option value="Female" selected="@(user?.Gender == "Female")">Female</option>
+                    <option value="Child" selected="@(user?.Gender == "Child")">Child</option>
+                </select>
+            </label>
+
+            <label>
+                <span>Clothing type</span>
+                <select name="ClothingType" class="form-select" data-upload-clothing-category required>
+                    <option value="">Select category</option>
+                    <option value="T-Shirt" data-audience="male female child" data-area="upper">T-Shirt</option>
+                    <option value="Jersey" data-audience="male child" data-area="upper">Jersey</option>
+                    <option value="Tank Top" data-audience="male child" data-area="upper">Tank Top</option>
+                    <option value="Shirt" data-audience="male female child" data-area="upper">Shirt</option>
+                    <option value="Chemise" data-audience="female" data-area="upper">Chemise</option>
+                    <option value="Blouse" data-audience="female" data-area="upper">Blouse</option>
+                    <option value="Hoodie" data-audience="male female child" data-area="upper">Hoodie</option>
+                    <option value="Jacket" data-audience="male female child" data-area="upper">Jacket</option>
+                    <option value="Pants" data-audience="male female child" data-area="lower">Pants</option>
+                    <option value="Shorts" data-audience="male female child" data-area="lower">Shorts</option>
+                    <option value="Dress" data-audience="female child" data-area="overall">Dress</option>
+                    <option value="Abaya" data-audience="female" data-area="overall">Abaya</option>
+                    <option value="Galabeya" data-audience="male child" data-area="overall">Galabeya</option>
+                    <option value="Jumpsuit" data-audience="female child" data-area="overall">Jumpsuit / Salopette</option>
+                </select>
+            </label>
+
+            <label>
+                <span>Model view</span>
+                <select name="GarmentView" class="form-select" data-upload-garment-view required>
+                    <option value="front">Front</option>
+                    <option value="back">Back</option>
+                </select>
+            </label>
+
+            <label>
+                <span>Fitting area</span>
+                <select name="GarmentArea" class="form-select" data-upload-garment-area required>
+                    <option value="">Select area</option>
+                    <option value="upper">Upper</option>
+                    <option value="lower">Lower</option>
+                    <option value="overall">Overall</option>
+                </select>
+            </label>
+
+        </div>
+
+        <div class="upload-actions">
+            <a class="btn btn-ghost" asp-controller="TryOn" asp-action="Upload">
+                <i class="bi bi-arrow-clockwise"></i>
+                Start Over
+            </a>
+            <button type="submit" class="btn btn-brand" data-upload-submit>
+                <i class="bi bi-stars"></i>
+                Generate Try-On
+            </button>
+        </div>
+    </form>
+</section>

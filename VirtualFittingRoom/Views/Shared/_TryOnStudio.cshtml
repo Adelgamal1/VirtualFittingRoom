@@ -1,0 +1,303 @@
+@{
+    var isLoggedIn = Context.Session.GetInt32("UserId") != null;
+    var user = ViewBag.UserProfile as VirtualFittingRoom.Models.UserMeasurement;
+    var isPublicLive = ViewBag.IsPublicLive as bool? ?? false;
+    var initialClothingUrl = ViewBag.InitialClothingUrl as string ?? "";
+    var initialClothingType = ViewBag.InitialClothingType as string ?? "T-Shirt";
+    var initialGarmentArea = ViewBag.InitialGarmentArea as string ?? "upper";
+}
+
+<section class="mobile-studio-shell @(isPublicLive ? "public-live-shell" : "")">
+    <form asp-controller="TryOn"
+          asp-action="StartSession"
+          method="post"
+          enctype="multipart/form-data"
+          class="mobile-studio-form"
+          data-tryon-form
+          data-public-live="@isPublicLive.ToString().ToLowerInvariant()"
+          data-initial-clothing-url="@initialClothingUrl"
+          data-live-preview="true"
+          data-auto-camera="@isPublicLive.ToString().ToLowerInvariant()">
+        <div asp-validation-summary="All" class="text-danger small mb-3"></div>
+
+        <input type="hidden" name="imageData" id="imageData" data-image-data />
+        <input type="hidden" name="clothingImageData" id="clothingImageData" data-clothing-image-data />
+        <input type="hidden" name="poseLandmarksData" data-pose-landmarks />
+
+        <div class="studio-device">
+            <div class="device-topbar">
+                <strong>Virtual Fitting Room</strong>
+                <button type="button" class="icon-pill" data-open-camera aria-label="Open camera">
+                    <i class="bi bi-camera-video"></i>
+                </button>
+            </div>
+
+            <div class="studio-tab-panel is-active" data-studio-tab-panel="live">
+                <div class="live-stage">
+                    <div class="camera-shell" data-camera-section>
+                        <video id="video" autoplay playsinline muted data-camera-feed></video>
+                        <canvas class="live-overlay-canvas" data-live-overlay-canvas></canvas>
+                        <img alt="" class="live-garment-overlay d-none" data-live-garment-overlay />
+                        <canvas id="canvas" data-camera-canvas></canvas>
+                        <div class="camera-overlay" data-camera-status>Live camera ready</div>
+
+                        <div class="live-corners" aria-hidden="true">
+                            <span></span><span></span><span></span><span></span>
+                        </div>
+
+                        <div class="live-bottom-tray compact-tray">
+                            <div class="live-actions live-actions-split">
+                                <button type="button" class="live-action-btn" data-open-camera>
+                                    <i class="bi bi-camera-video"></i>
+                                    <span>Camera</span>
+                                </button>
+                                <button type="button" class="live-action-btn" data-live-clothing-upload-trigger>
+                                    <i class="bi bi-folder2-open"></i>
+                                    <span>Garment</span>
+                                </button>
+                                <button type="button" class="live-action-btn" data-live-clothing-link-trigger>
+                                    <i class="bi bi-link-45deg"></i>
+                                    <span>Link</span>
+                                </button>
+                                <button type="button" class="live-action-btn" data-live-ai-fit>
+                                    <i class="bi bi-stars"></i>
+                                    <span>AI Fit</span>
+                                </button>
+                            </div>
+                            <div class="live-link-panel d-none" data-live-clothing-link-panel>
+                                <input type="url" class="form-control" placeholder="Paste clothing image link" data-live-clothing-url />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="studio-tab-panel" data-studio-tab-panel="files">
+                <div class="file-shelf">
+                    <div class="upload-card">
+                        <span class="upload-icon"><i class="bi bi-person-square"></i></span>
+                        <div>
+                            <h3>Person photo</h3>
+                            <p>Upload the model image for Hugging Face processing.</p>
+                        </div>
+                        <div class="source-row source-row-three">
+                            <button type="button" class="btn btn-navy" data-file-camera-open>
+                                <i class="bi bi-camera-video"></i>
+                                Camera
+                            </button>
+                            <button type="button" class="btn btn-ghost" data-pose-upload-trigger>
+                                <i class="bi bi-images"></i>
+                                Gallery
+                            </button>
+                            <button type="button" class="btn btn-ghost" data-pose-link-trigger>
+                                <i class="bi bi-link-45deg"></i>
+                                Link
+                            </button>
+                            <button type="button" class="btn btn-ghost" data-drive-open>
+                                <i class="bi bi-google"></i>
+                                Drive
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="file-camera-panel d-none" data-file-camera-panel>
+                        <div class="file-camera-frame">
+                            <video autoplay playsinline muted data-file-camera-feed></video>
+                            <canvas data-file-camera-canvas></canvas>
+                        </div>
+                        <div class="source-row">
+                            <button type="button" class="btn btn-navy" data-file-camera-capture>
+                                <i class="bi bi-camera"></i>
+                                Capture model photo
+                            </button>
+                            <button type="button" class="btn btn-ghost" data-file-camera-close>
+                                <i class="bi bi-x-lg"></i>
+                                Close camera
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="upload-card">
+                        <span class="upload-icon"><i class="bi bi-bag"></i></span>
+                        <div>
+                            <h3>Clothing source</h3>
+                            <p>Upload or paste the garment image to generate the final try-on.</p>
+                        </div>
+                        <div class="source-row source-row-four">
+                            <button type="button" class="btn btn-navy" data-clothing-upload-trigger>
+                                <i class="bi bi-images"></i>
+                                Gallery
+                            </button>
+                            <button type="button" class="btn btn-ghost" data-clothing-link-trigger>
+                                <i class="bi bi-link-45deg"></i>
+                                Link
+                            </button>
+                            <button type="button" class="btn btn-ghost" data-drive-open>
+                                <i class="bi bi-google"></i>
+                                Drive
+                            </button>
+                            <button type="button" class="btn btn-navy" data-store-open>
+                                <i class="bi bi-shop"></i>
+                                Store
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="preview-grid">
+                        <div class="preview-tile">
+                            <img alt="Person preview" class="preview-image d-none" data-pose-preview />
+                            <canvas class="pose-landmark-overlay d-none" data-pose-overlay></canvas>
+                            <p class="preview-empty" data-pose-empty>Person preview</p>
+                        </div>
+                        <div class="preview-tile">
+                            <img alt="Clothing preview" class="preview-image d-none" data-clothing-preview />
+                            <p class="preview-empty" data-clothing-empty>Clothing preview</p>
+                        </div>
+                    </div>
+
+                    <div class="link-panel d-none" data-pose-link-panel>
+                        <label class="form-label">Model image link</label>
+                        <input type="url" name="poseImageUrl" class="form-control" placeholder="https://example.com/model.jpg" data-pose-url />
+                    </div>
+
+                    <div class="link-panel d-none" data-clothing-link-panel>
+                        <label class="form-label">Clothing image link</label>
+                        <input type="url" name="clothingImageUrl" class="form-control" placeholder="https://example.com/garment.jpg" data-clothing-url />
+                    </div>
+                </div>
+            </div>
+
+            <div class="studio-tab-panel" data-studio-tab-panel="settings">
+                <div class="settings-stack">
+                    <label>
+                        <span>Target body</span>
+                        <select name="Gender" class="form-select" required data-target-body>
+                            <option value="">Select target</option>
+                            <option value="Male" selected="@(user?.Gender == "Male")">Male</option>
+                            <option value="Female" selected="@(user?.Gender == "Female")">Female</option>
+                            <option value="Child" selected="@(user?.Gender == "Child")">Child</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        <span>Age</span>
+                        <input name="Age"
+                               type="number"
+                               class="form-control"
+                               min="1"
+                               max="110"
+                               value="@(user?.Age > 0 ? user.Age : 26)"
+                               required />
+                    </label>
+
+                    <label>
+                        <span>Height</span>
+                        <input name="Height"
+                               type="number"
+                               class="form-control"
+                               min="80"
+                               max="240"
+                               step="0.1"
+                               value="@(user?.Height > 0 ? user.Height : 175)"
+                               required />
+                    </label>
+
+                    <label>
+                        <span>Weight</span>
+                        <input name="Weight"
+                               type="number"
+                               class="form-control"
+                               min="20"
+                               max="250"
+                               step="0.1"
+                               value="@(user?.Weight > 0 ? user.Weight : 70)"
+                               required />
+                    </label>
+
+                    <label>
+                        <span>Clothing type</span>
+                        <select id="clothing" name="ClothingType" class="form-select" required data-clothing-category>
+                            <option value="">Select category</option>
+                            <option value="T-Shirt" data-audience="male female child" data-area="upper" selected="@(initialClothingType == "T-Shirt")">T-Shirt</option>
+                            <option value="Jersey" data-audience="male child" data-area="upper" selected="@(initialClothingType == "Jersey")">Jersey</option>
+                            <option value="Tank Top" data-audience="male child" data-area="upper" selected="@(initialClothingType == "Tank Top")">Tank Top</option>
+                            <option value="Shirt" data-audience="male female child" data-area="upper" selected="@(initialClothingType == "Shirt")">Shirt</option>
+                            <option value="Chemise" data-audience="female" data-area="upper" selected="@(initialClothingType == "Chemise")">Chemise</option>
+                            <option value="Blouse" data-audience="female" data-area="upper" selected="@(initialClothingType == "Blouse")">Blouse</option>
+                            <option value="Hoodie" data-audience="male female child" data-area="upper" selected="@(initialClothingType == "Hoodie")">Hoodie</option>
+                            <option value="Jacket" data-audience="male female child" data-area="upper" selected="@(initialClothingType == "Jacket")">Jacket</option>
+                            <option value="Pants" data-audience="male female child" data-area="lower" selected="@(initialClothingType == "Pants")">Pants</option>
+                            <option value="Shorts" data-audience="male female child" data-area="lower" selected="@(initialClothingType == "Shorts")">Shorts</option>
+                            <option value="Dress" data-audience="female child" data-area="overall" selected="@(initialClothingType == "Dress")">Dress</option>
+                            <option value="Abaya" data-audience="female" data-area="overall" selected="@(initialClothingType == "Abaya")">Abaya</option>
+                            <option value="Galabeya" data-audience="male child" data-area="overall" selected="@(initialClothingType == "Galabeya")">Galabeya</option>
+                            <option value="Jumpsuit" data-audience="female child" data-area="overall" selected="@(initialClothingType == "Jumpsuit")">Jumpsuit / Salopette</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        <span>Model view</span>
+                        <select name="GarmentView" class="form-select" required data-garment-view>
+                            <option value="front">Front</option>
+                            <option value="back">Back</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        <span>Fitting area</span>
+                        <select name="GarmentArea" class="form-select" required data-garment-area>
+                            <option value="">Select area</option>
+                            <option value="upper" selected="@(initialGarmentArea == "upper")">Upper</option>
+                            <option value="lower" selected="@(initialGarmentArea == "lower")">Lower</option>
+                            <option value="overall" selected="@(initialGarmentArea == "overall")">Overall</option>
+                        </select>
+                    </label>
+
+                    <label class="debug-toggle">
+                        <input type="checkbox" data-pose-debug-toggle />
+                        <span>Pose debug</span>
+                    </label>
+                    <output data-fitting-debug-output>Waiting for body tracking</output>
+
+                    @if (isLoggedIn)
+                    {
+                        <button type="submit"
+                                class="btn btn-navy w-100"
+                                formaction="@Url.Action("SaveProfile", "TryOn")"
+                                formmethod="post"
+                                formnovalidate>
+                            Save Profile
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <nav class="studio-bottom-nav" aria-label="Studio sections">
+                <button type="button" class="is-active" data-studio-tab="live">
+                    <i class="bi bi-camera-video"></i>
+                    <span>Live</span>
+                </button>
+                <button type="button" data-open-upload-page data-upload-page-url="@Url.Action("Upload", "TryOn")">
+                    <i class="bi bi-folder2-open"></i>
+                    <span>Files</span>
+                </button>
+                <button type="button" data-studio-tab="settings">
+                    <i class="bi bi-sliders"></i>
+                    <span>Settings</span>
+                </button>
+            </nav>
+        </div>
+
+        <input id="poseFile" type="file" name="imageFile" class="visually-hidden-input" accept="image/*" data-pose-upload />
+        <input id="clothingFile" type="file" name="clothingFile" class="visually-hidden-input" accept="image/*" data-clothing-upload />
+
+        <div class="submit-row d-none" data-submit-row>
+            @if (!isLoggedIn)
+            {
+                <p class="signin-hint">Submitting will ask you to sign in first.</p>
+            }
+
+            <button type="submit" class="btn btn-brand w-100">Generate Final Try-On</button>
+        </div>
+    </form>
+</section>

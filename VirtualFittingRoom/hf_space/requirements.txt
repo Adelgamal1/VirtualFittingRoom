@@ -1,0 +1,15 @@
+spaces
+torch==2.11.0
+torchvision==0.26.0
+torchaudio==2.11.0
+diffusers==0.37.1
+transformers==5.6.0
+accelerate==1.13.0
+opencv-python==4.13.0.92
+pillow==11.3.0
+safetensors==0.7.0
+huggingface_hub==1.11.0
+numpy==2.4.4
+scipy
+tqdm
+requests
