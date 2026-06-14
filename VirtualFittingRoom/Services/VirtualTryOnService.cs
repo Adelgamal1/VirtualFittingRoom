@@ -206,8 +206,11 @@ namespace VirtualFittingRoom.Services
             var baseUrl = _options.HuggingFaceSpaceUrl.TrimEnd('/');
             var apiName = _options.HuggingFaceApiName.Trim().Trim('/');
 
-            var personFile = await UploadGradioFileAsync(client, baseUrl, personImage, "person.png", cancellationToken);
-            var garmentFile = await UploadGradioFileAsync(client, baseUrl, clothingImage, "garment.png", cancellationToken);
+            var personUpload = await UploadGradioFileAsync(client, baseUrl, personImage, "person.png", null, cancellationToken);
+            var garmentUpload = await UploadGradioFileAsync(client, baseUrl, clothingImage, "garment.png", personUpload.ApiPrefix, cancellationToken);
+            var personFile = personUpload.FileData;
+            var garmentFile = garmentUpload.FileData;
+            var gradioApiPrefix = garmentUpload.ApiPrefix;
             var shouldSendPose = !string.IsNullOrWhiteSpace(poseLandmarksData);
 
             object BuildRequest(bool includePoseLandmarks)
@@ -237,7 +240,7 @@ namespace VirtualFittingRoom.Services
             }
 
             using var submitResponse = await client.PostAsJsonAsync(
-                $"{baseUrl}/call/{apiName}",
+                $"{baseUrl}{gradioApiPrefix}/call/{apiName}",
                 BuildRequest(shouldSendPose),
                 cancellationToken);
 
@@ -247,7 +250,7 @@ namespace VirtualFittingRoom.Services
                 if (shouldSendPose && IsGradioInputCountError(submitJson))
                 {
                     using var retryResponse = await client.PostAsJsonAsync(
-                        $"{baseUrl}/call/{apiName}",
+                        $"{baseUrl}{gradioApiPrefix}/call/{apiName}",
                         BuildRequest(false),
                         cancellationToken);
 
@@ -257,13 +260,13 @@ namespace VirtualFittingRoom.Services
                         return (false, null, BuildHuggingFaceHttpError("submit the try-on request", (int)retryResponse.StatusCode, retryJson, baseUrl));
                     }
 
-                    return await ReadHuggingFaceQueuedResultAsync(client, baseUrl, apiName, retryJson, cancellationToken);
+                    return await ReadHuggingFaceQueuedResultAsync(client, baseUrl, gradioApiPrefix, apiName, retryJson, cancellationToken);
                 }
 
                 return (false, null, BuildHuggingFaceHttpError("submit the try-on request", (int)submitResponse.StatusCode, submitJson, baseUrl));
             }
 
-            return await ReadHuggingFaceQueuedResultAsync(client, baseUrl, apiName, submitJson, cancellationToken);
+            return await ReadHuggingFaceQueuedResultAsync(client, baseUrl, gradioApiPrefix, apiName, submitJson, cancellationToken);
         }
 
         private static bool IsGradioInputCountError(string responseBody)
@@ -275,6 +278,7 @@ namespace VirtualFittingRoom.Services
         private async Task<(bool Success, byte[]? OutputBytes, string? Error)> ReadHuggingFaceQueuedResultAsync(
             HttpClient client,
             string baseUrl,
+            string gradioApiPrefix,
             string apiName,
             string submitJson,
             CancellationToken cancellationToken)
@@ -286,7 +290,7 @@ namespace VirtualFittingRoom.Services
             }
 
             using var resultResponse = await client.GetAsync(
-                $"{baseUrl}/call/{apiName}/{Uri.EscapeDataString(eventId)}",
+                $"{baseUrl}{gradioApiPrefix}/call/{apiName}/{Uri.EscapeDataString(eventId)}",
                 cancellationToken);
 
             var eventStream = await resultResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -740,23 +744,51 @@ namespace VirtualFittingRoom.Services
             };
         }
 
-        private static async Task<object> UploadGradioFileAsync(
+        private sealed record GradioUploadResult(object FileData, string ApiPrefix);
+
+        private static async Task<GradioUploadResult> UploadGradioFileAsync(
             HttpClient client,
             string baseUrl,
             byte[] imageBytes,
             string fileName,
+            string? preferredApiPrefix,
             CancellationToken cancellationToken)
         {
-            using var content = new MultipartFormDataContent();
-            content.Add(CreateGradioUploadContent(imageBytes), "files", fileName);
+            var prefixes = new[] { preferredApiPrefix, "/gradio_api", string.Empty }
+                .Where(prefix => prefix is not null)
+                .Select(prefix => prefix!)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
 
-            using var response = await client.PostAsync($"{baseUrl}/upload", content, cancellationToken);
-            var json = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            string? lastJson = null;
+            var lastStatusCode = 0;
+            foreach (var prefix in prefixes)
             {
-                throw new InvalidOperationException(BuildHuggingFaceHttpError("upload the images", (int)response.StatusCode, json, baseUrl));
+                using var content = new MultipartFormDataContent();
+                content.Add(CreateGradioUploadContent(imageBytes), "files", fileName);
+
+                using var response = await client.PostAsync($"{baseUrl}{prefix}/upload", content, cancellationToken);
+                var json = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                {
+                    lastJson = json;
+                    lastStatusCode = (int)response.StatusCode;
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    {
+                        continue;
+                    }
+
+                    throw new InvalidOperationException(BuildHuggingFaceHttpError("upload the images", (int)response.StatusCode, json, baseUrl));
+                }
+
+                return new GradioUploadResult(ParseGradioUploadResponse(json, baseUrl, fileName, imageBytes.LongLength), prefix);
             }
 
+            throw new InvalidOperationException(BuildHuggingFaceHttpError("upload the images", lastStatusCode == 0 ? 404 : lastStatusCode, lastJson ?? "{\"detail\":\"Not Found\"}", baseUrl));
+        }
+
+        private static object ParseGradioUploadResponse(string json, string baseUrl, string fileName, long fileSize)
+        {
             using var document = JsonDocument.Parse(json);
             if (document.RootElement.ValueKind == JsonValueKind.String)
             {
@@ -766,10 +798,23 @@ namespace VirtualFittingRoom.Services
                     throw new InvalidOperationException("Hugging Face upload returned an empty file path.");
                 }
 
-                return CreateGradioFileData(uploadedPath, baseUrl, fileName, imageBytes.LongLength);
+                return CreateGradioFileData(uploadedPath, baseUrl, fileName, fileSize);
             }
 
             var file = document.RootElement;
+            if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty("files", out var files) &&
+                files.ValueKind == JsonValueKind.Array)
+            {
+                var uploadedFiles = files.EnumerateArray().ToList();
+                if (uploadedFiles.Count == 0)
+                {
+                    throw new InvalidOperationException($"Hugging Face upload returned no files. Raw response: {json}");
+                }
+
+                file = uploadedFiles[0];
+            }
+
             if (document.RootElement.ValueKind == JsonValueKind.Array)
             {
                 var uploadedFiles = document.RootElement.EnumerateArray().ToList();
@@ -787,7 +832,7 @@ namespace VirtualFittingRoom.Services
                         throw new InvalidOperationException("Hugging Face upload returned an empty file path.");
                     }
 
-                    return CreateGradioFileData(uploadedPath, baseUrl, fileName, imageBytes.LongLength);
+                    return CreateGradioFileData(uploadedPath, baseUrl, fileName, fileSize);
                 }
             }
 
@@ -801,7 +846,7 @@ namespace VirtualFittingRoom.Services
                 path,
                 baseUrl,
                 TryGetJsonString(file, "orig_name") ?? fileName,
-                TryGetJsonInt64(file, "size") ?? imageBytes.LongLength,
+                TryGetJsonInt64(file, "size") ?? fileSize,
                 TryGetJsonString(file, "url"),
                 TryGetJsonString(file, "mime_type") ?? "image/png");
         }
