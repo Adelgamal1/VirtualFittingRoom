@@ -667,7 +667,7 @@ namespace VirtualFittingRoom.Services
             {
                 return normalizedType switch
                 {
-                    "t-shirt" => $"{viewText} t-shirt worn naturally on the body with realistic fabric drape, preserve the source garment color and printed logo exactly, round collar following the collarbone below the neck, shoulder seam to shoulder seam, sleeves wrapped on arms, fully replace the original upper garment, keep the face and natural neck unchanged, not pasted as a flat sticker",
+                    "t-shirt" => $"{viewText} short-sleeve t-shirt worn naturally on the body with realistic fabric drape, preserve the source garment color, keep one centered front print without repeating it, round collar following the collarbone below the neck, shoulder seam to shoulder seam, sleeves wrapped on arms, fully replace the original upper garment, keep the face and natural neck unchanged",
                     "tank-top" => $"{viewText} sleeveless tank top aligned {neckText}, shoulder strap to shoulder, chest panel to torso",
                     "shirt" => $"{viewText} shirt aligned {neckText}, shoulder to shoulder, elbow to elbow",
                     "chemise" => $"{viewText} chemise blouse aligned {neckText}, shoulder to shoulder, sleeve to arm",
@@ -1205,7 +1205,7 @@ namespace VirtualFittingRoom.Services
 
             if (message.Contains("copying content to a stream", StringComparison.OrdinalIgnoreCase))
             {
-                message += " This usually means the local AI server closed the connection while ASP.NET was sending the images. Check that the Python inference server is still running and that the selected images are valid.";
+                message += " The AI backend closed the connection while ASP.NET was sending or reading the images. Restart the app/backend and try again with smaller images.";
             }
 
             if (message.Contains("No such host is known", StringComparison.OrdinalIgnoreCase) ||
