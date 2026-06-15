@@ -69,8 +69,8 @@ namespace VirtualFittingRoom.Services
                 var normalizedGarmentView = NormalizeGarmentView(garmentView);
                 var localMode = IsLocalMode();
                 var huggingFaceMode = IsHuggingFaceMode();
-                personImage = ResizeImageForInference(personImage, localMode ? 560 : huggingFaceMode ? 720 : 900, 76);
-                clothingImage = ResizeImageForInference(clothingImage, localMode ? 420 : huggingFaceMode ? 560 : 700, 76);
+                personImage = ResizeImageForInference(personImage, localMode ? 560 : huggingFaceMode ? 576 : 900, huggingFaceMode ? 72 : 76);
+                clothingImage = ResizeImageForInference(clothingImage, localMode ? 420 : huggingFaceMode ? 512 : 700, huggingFaceMode ? 72 : 76);
 
                 return IsApiMode()
                     ? await RunAgainstApiAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken, null, clothingType, normalizedGarmentView, poseLandmarksData)
@@ -95,8 +95,8 @@ namespace VirtualFittingRoom.Services
             try
             {
                 var normalizedGarmentArea = NormalizeGarmentArea(garmentArea);
-                personImage = ResizeImageForInference(personImage, 720, 76);
-                clothingImage = ResizeImageForInference(clothingImage, 560, 76);
+                personImage = ResizeImageForInference(personImage, 576, 72);
+                clothingImage = ResizeImageForInference(clothingImage, 512, 72);
 
                 return await RunAgainstHuggingFaceSpaceAsync(
                     personImage,

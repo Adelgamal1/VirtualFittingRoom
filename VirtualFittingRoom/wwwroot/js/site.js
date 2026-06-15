@@ -1685,7 +1685,7 @@
                 return;
             }
 
-            poseResizePromise = resizeImageFile(file)
+            poseResizePromise = resizeImageFile(file, 720, 0.78)
                 .then(dataUrl => {
                     imageData.value = dataUrl;
                 })
@@ -1724,7 +1724,7 @@
                 return;
             }
 
-            clothingResizePromise = resizeImageFile(file, 700, 0.82)
+            clothingResizePromise = resizeImageFile(file, 640, 0.78)
                 .then(dataUrl => {
                     clothingImageData.value = dataUrl;
                 })
