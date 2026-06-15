@@ -17,6 +17,18 @@ BASE_MODEL_PATH_RAW = os.getenv("CATVTON_BASE_MODEL_PATH", "").strip()
 RESUME_PATH_RAW = os.getenv("CATVTON_RESUME_PATH", "").strip()
 ATTN_VERSION = os.getenv("CATVTON_ATTN_VERSION", "mix")
 MODEL_REPO_ID = os.getenv("CATVTON_MODEL_REPO_ID", "Adelgamal1/virtual-fitting-room-model")
+CPU_INFERENCE_WIDTH = int(os.getenv("CATVTON_CPU_WIDTH", "320"))
+CPU_INFERENCE_HEIGHT = int(os.getenv("CATVTON_CPU_HEIGHT", "448"))
+CPU_INFERENCE_STEPS = int(os.getenv("CATVTON_CPU_STEPS", "10"))
+GPU_INFERENCE_WIDTH = int(os.getenv("CATVTON_GPU_WIDTH", "384"))
+GPU_INFERENCE_HEIGHT = int(os.getenv("CATVTON_GPU_HEIGHT", "512"))
+GPU_INFERENCE_STEPS = int(os.getenv("CATVTON_GPU_STEPS", "16"))
+
+try:
+    torch.set_num_threads(int(os.getenv("TORCH_NUM_THREADS", "2")))
+    torch.set_num_interop_threads(int(os.getenv("TORCH_NUM_INTEROP_THREADS", "1")))
+except Exception:
+    pass
 
 
 def find_project_bundle(project_root: Path) -> Path:
@@ -315,7 +327,8 @@ def load_runtime():
     weight_dtype = torch.bfloat16 if device == "cuda" else torch.float32
 
     masker = None
-    if AutoMasker is not None and densepose_root.exists() and schp_root.exists():
+    use_automasker = device != "cpu" and os.getenv("CATVTON_ENABLE_AUTOMASKER", "1") != "0"
+    if use_automasker and AutoMasker is not None and densepose_root.exists() and schp_root.exists():
         masker = AutoMasker(
             densepose_ckpt=str(densepose_root),
             schp_ckpt=str(schp_root),
@@ -335,9 +348,9 @@ def load_runtime():
         "pipeline": pipeline,
         "masker": masker,
         "device": device,
-        "width": 384,
-        "height": 512,
-        "steps": 16,
+        "width": GPU_INFERENCE_WIDTH if device == "cuda" else CPU_INFERENCE_WIDTH,
+        "height": GPU_INFERENCE_HEIGHT if device == "cuda" else CPU_INFERENCE_HEIGHT,
+        "steps": GPU_INFERENCE_STEPS if device == "cuda" else CPU_INFERENCE_STEPS,
         "guidance_scale": 2.0,
     }
 
@@ -359,7 +372,7 @@ def run_tryon(
     garment_description="Upper body clothing garment",
     auto_mask=True,
     auto_crop=False,
-    denoise_steps=16,
+    denoise_steps=10,
     seed=555,
     pose_landmarks_data="",
 ):
@@ -387,16 +400,19 @@ def run_tryon(
     generator = torch.Generator(device=runtime["device"])
     generator.manual_seed(int(seed))
 
-    results = runtime["pipeline"](
-        person_image,
-        cloth_image,
-        mask,
-        num_inference_steps=max(8, min(24, int(denoise_steps))),
-        guidance_scale=runtime["guidance_scale"],
-        height=runtime["height"],
-        width=runtime["width"],
-        generator=generator,
-    )
+    requested_steps = int(denoise_steps)
+    max_steps = 24 if runtime["device"] == "cuda" else 14
+    with torch.inference_mode():
+        results = runtime["pipeline"](
+            person_image,
+            cloth_image,
+            mask,
+            num_inference_steps=max(6, min(max_steps, requested_steps)),
+            guidance_scale=runtime["guidance_scale"],
+            height=runtime["height"],
+            width=runtime["width"],
+            generator=generator,
+        )
     result = results[0]
     if result.size != person_image.size:
         result = result.resize(person_image.size, Image.LANCZOS)
@@ -432,7 +448,7 @@ with gr.Blocks(title="Virtual Fitting Room") as demo:
         auto_crop_input = gr.Checkbox(value=False, label="Auto Crop")
 
     with gr.Row():
-        denoise_steps_input = gr.Slider(8, 24, value=16, step=1, label="Denoise Steps")
+        denoise_steps_input = gr.Slider(6, 24, value=10, step=1, label="Denoise Steps")
         seed_input = gr.Number(value=555, precision=0, label="Seed")
     pose_landmarks_input = gr.Textbox(value="", visible=False, label="Pose Landmarks")
 

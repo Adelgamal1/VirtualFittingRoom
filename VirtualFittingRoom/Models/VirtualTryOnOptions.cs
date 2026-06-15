@@ -30,7 +30,7 @@ namespace VirtualFittingRoom.Models
         public string HuggingFaceSpaceUrl { get; set; } = "https://YOUR_USERNAME-YOUR_SPACE_NAME.hf.space";
         public string HuggingFaceApiName { get; set; } = "tryon";
         public string HuggingFaceToken { get; set; } = string.Empty;
-        public int HuggingFaceDenoiseSteps { get; set; } = 16;
+        public int HuggingFaceDenoiseSteps { get; set; } = 10;
         public int HuggingFaceSeed { get; set; } = 42;
         public bool HuggingFaceAutoMask { get; set; } = true;
         public bool HuggingFaceAutoCrop { get; set; } = false;
