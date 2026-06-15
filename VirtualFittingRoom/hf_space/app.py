@@ -8,7 +8,7 @@ import gradio as gr
 import spaces
 import torch
 from huggingface_hub import snapshot_download
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
 SPACE_ROOT = Path(__file__).resolve().parent
@@ -17,18 +17,6 @@ BASE_MODEL_PATH_RAW = os.getenv("CATVTON_BASE_MODEL_PATH", "").strip()
 RESUME_PATH_RAW = os.getenv("CATVTON_RESUME_PATH", "").strip()
 ATTN_VERSION = os.getenv("CATVTON_ATTN_VERSION", "mix")
 MODEL_REPO_ID = os.getenv("CATVTON_MODEL_REPO_ID", "Adelgamal1/virtual-fitting-room-model")
-CPU_INFERENCE_WIDTH = int(os.getenv("CATVTON_CPU_WIDTH", "384"))
-CPU_INFERENCE_HEIGHT = int(os.getenv("CATVTON_CPU_HEIGHT", "512"))
-CPU_INFERENCE_STEPS = int(os.getenv("CATVTON_CPU_STEPS", "14"))
-GPU_INFERENCE_WIDTH = int(os.getenv("CATVTON_GPU_WIDTH", "384"))
-GPU_INFERENCE_HEIGHT = int(os.getenv("CATVTON_GPU_HEIGHT", "512"))
-GPU_INFERENCE_STEPS = int(os.getenv("CATVTON_GPU_STEPS", "16"))
-
-try:
-    torch.set_num_threads(int(os.getenv("TORCH_NUM_THREADS", "2")))
-    torch.set_num_interop_threads(int(os.getenv("TORCH_NUM_INTEROP_THREADS", "1")))
-except Exception:
-    pass
 
 
 def find_project_bundle(project_root: Path) -> Path:
@@ -138,16 +126,16 @@ def build_fallback_mask(image: Image.Image, category: str, pose_landmarks_data=N
             center = int((pose["shoulder_center"][0] * 0.64) + (pose["hip_center"][0] * 0.36))
             left_shoulder_x = int(pose["left_shoulder"][0])
             right_shoulder_x = int(pose["right_shoulder"][0])
-            left = int(max(0, left_shoulder_x - (shoulder_width * 0.48)))
-            right = int(min(width, right_shoulder_x + (shoulder_width * 0.48)))
+            left = int(max(0, left_shoulder_x - (shoulder_width * 0.46)))
+            right = int(min(width, right_shoulder_x + (shoulder_width * 0.46)))
             bottom_half = int(max(shoulder_width * 0.50, abs(pose["right_hip"][0] - pose["left_hip"][0]) * 0.62))
 
             shirt_shape = [
                 (left, int(shoulder_y + shoulder_width * 0.16)),
-                (int(left_shoulder_x - shoulder_width * 0.055), collar_y),
+                (int(left_shoulder_x - shoulder_width * 0.06), collar_y),
                 (int(center - shoulder_width * 0.22), int(collar_y - shoulder_width * 0.035)),
                 (int(center + shoulder_width * 0.22), int(collar_y - shoulder_width * 0.035)),
-                (int(right_shoulder_x + shoulder_width * 0.055), collar_y),
+                (int(right_shoulder_x + shoulder_width * 0.06), collar_y),
                 (right, int(shoulder_y + shoulder_width * 0.16)),
                 (int(center + bottom_half), hem_y),
                 (int(center - bottom_half), hem_y),
@@ -155,10 +143,10 @@ def build_fallback_mask(image: Image.Image, category: str, pose_landmarks_data=N
             draw.polygon(shirt_shape, fill=255)
 
             neck_cutout = (
-                int(center - shoulder_width * 0.145),
-                int(collar_y - shoulder_width * 0.070),
-                int(center + shoulder_width * 0.145),
-                int(collar_y + shoulder_width * 0.052),
+                int(center - shoulder_width * 0.155),
+                int(collar_y - shoulder_width * 0.075),
+                int(center + shoulder_width * 0.155),
+                int(collar_y + shoulder_width * 0.070),
             )
             draw.ellipse(neck_cutout, fill=0)
         else:
@@ -192,7 +180,7 @@ def build_fallback_mask(image: Image.Image, category: str, pose_landmarks_data=N
         box = (int(width * 0.16), int(height * 0.06), int(width * 0.84), int(height * 0.96))
         draw.rounded_rectangle(box, radius=max(12, width // 16), fill=255)
     if category == "upper":
-        mask = mask.filter(ImageFilter.GaussianBlur(radius=1.0))
+        mask = mask.filter(ImageFilter.GaussianBlur(radius=1.2))
     return mask
 
 
@@ -222,10 +210,10 @@ def protect_identity_regions(mask: Image.Image, category: str, pose_landmarks_da
         draw.rectangle((0, 0, width, max(0, int(collar_y - shoulder_width * 0.18))), fill=255)
         draw.ellipse(
             (
-                int(center_x - shoulder_width * 0.145),
-                int(collar_y - shoulder_width * 0.150),
-                int(center_x + shoulder_width * 0.145),
-                int(collar_y + shoulder_width * 0.055),
+                int(center_x - shoulder_width * 0.16),
+                int(collar_y - shoulder_width * 0.16),
+                int(center_x + shoulder_width * 0.16),
+                int(collar_y + shoulder_width * 0.07),
             ),
             fill=255,
         )
@@ -327,8 +315,7 @@ def load_runtime():
     weight_dtype = torch.bfloat16 if device == "cuda" else torch.float32
 
     masker = None
-    use_automasker = device != "cpu" and os.getenv("CATVTON_ENABLE_AUTOMASKER", "1") != "0"
-    if use_automasker and AutoMasker is not None and densepose_root.exists() and schp_root.exists():
+    if AutoMasker is not None and densepose_root.exists() and schp_root.exists():
         masker = AutoMasker(
             densepose_ckpt=str(densepose_root),
             schp_ckpt=str(schp_root),
@@ -348,9 +335,9 @@ def load_runtime():
         "pipeline": pipeline,
         "masker": masker,
         "device": device,
-        "width": GPU_INFERENCE_WIDTH if device == "cuda" else CPU_INFERENCE_WIDTH,
-        "height": GPU_INFERENCE_HEIGHT if device == "cuda" else CPU_INFERENCE_HEIGHT,
-        "steps": GPU_INFERENCE_STEPS if device == "cuda" else CPU_INFERENCE_STEPS,
+        "width": 384,
+        "height": 512,
+        "steps": 8,
         "guidance_scale": 2.0,
     }
 
@@ -372,7 +359,7 @@ def run_tryon(
     garment_description="Upper body clothing garment",
     auto_mask=True,
     auto_crop=False,
-    denoise_steps=14,
+    denoise_steps=20,
     seed=555,
     pose_landmarks_data="",
 ):
@@ -388,11 +375,12 @@ def run_tryon(
 
     runtime = get_runtime()
 
-    if category == "upper" and pose_landmarks_data:
-        mask = build_fallback_mask(person_image, category, pose_landmarks_data)
-    elif auto_mask and runtime["masker"] is not None:
+    if auto_mask and runtime["masker"] is not None:
         mask_result = runtime["masker"](person_image, mask_type=category)
         mask = mask_result["mask"]
+        if category == "upper" and pose_landmarks_data:
+            pose_mask = build_fallback_mask(person_image, category, pose_landmarks_data)
+            mask = ImageChops.lighter(mask.convert("L"), pose_mask.convert("L"))
     else:
         mask = build_fallback_mask(person_image, category, pose_landmarks_data)
     mask = protect_identity_regions(mask, category, pose_landmarks_data)
@@ -400,23 +388,17 @@ def run_tryon(
     generator = torch.Generator(device=runtime["device"])
     generator.manual_seed(int(seed))
 
-    requested_steps = int(denoise_steps)
-    max_steps = 24 if runtime["device"] == "cuda" else 18
-    with torch.inference_mode():
-        results = runtime["pipeline"](
-            person_image,
-            cloth_image,
-            mask,
-            num_inference_steps=max(10, min(max_steps, requested_steps)),
-            guidance_scale=runtime["guidance_scale"],
-            height=runtime["height"],
-            width=runtime["width"],
-            generator=generator,
-        )
-    result = results[0]
-    if result.size != person_image.size:
-        result = result.resize(person_image.size, Image.LANCZOS)
-    return result
+    results = runtime["pipeline"](
+        person_image,
+        cloth_image,
+        mask,
+        num_inference_steps=int(denoise_steps),
+        guidance_scale=runtime["guidance_scale"],
+        height=runtime["height"],
+        width=runtime["width"],
+        generator=generator,
+    )
+    return results[0]
 
 
 with gr.Blocks(title="Virtual Fitting Room") as demo:
@@ -448,7 +430,7 @@ with gr.Blocks(title="Virtual Fitting Room") as demo:
         auto_crop_input = gr.Checkbox(value=False, label="Auto Crop")
 
     with gr.Row():
-        denoise_steps_input = gr.Slider(10, 24, value=14, step=1, label="Denoise Steps")
+        denoise_steps_input = gr.Slider(10, 50, value=20, step=1, label="Denoise Steps")
         seed_input = gr.Number(value=555, precision=0, label="Seed")
     pose_landmarks_input = gr.Textbox(value="", visible=False, label="Pose Landmarks")
 

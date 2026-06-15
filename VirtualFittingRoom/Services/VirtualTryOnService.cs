@@ -68,9 +68,8 @@ namespace VirtualFittingRoom.Services
                 var normalizedGarmentArea = NormalizeGarmentArea(garmentArea);
                 var normalizedGarmentView = NormalizeGarmentView(garmentView);
                 var localMode = IsLocalMode();
-                var huggingFaceMode = IsHuggingFaceMode();
-                personImage = ResizeImageForInference(personImage, localMode ? 560 : huggingFaceMode ? 576 : 900, huggingFaceMode ? 72 : 76);
-                clothingImage = ResizeImageForInference(clothingImage, localMode ? 420 : huggingFaceMode ? 512 : 700, huggingFaceMode ? 72 : 76);
+                personImage = ResizeImageForInference(personImage, localMode ? 560 : 900, 76);
+                clothingImage = ResizeImageForInference(clothingImage, localMode ? 420 : 700, 76);
 
                 return IsApiMode()
                     ? await RunAgainstApiAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken, null, clothingType, normalizedGarmentView, poseLandmarksData)
@@ -78,7 +77,7 @@ namespace VirtualFittingRoom.Services
                     ? await RunAgainstReplicateAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken)
                     : IsHuggingFaceMode()
                     ? await RunAgainstHuggingFaceSpaceAsync(personImage, clothingImage, normalizedGarmentArea, clothingType, normalizedGarmentView, poseLandmarksData, cancellationToken)
-                    : await RunAgainstLocalServerAsync(personImage, clothingImage, normalizedGarmentArea, clothingType, normalizedGarmentView, cancellationToken);
+                    : await RunAgainstLocalServerAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -95,8 +94,8 @@ namespace VirtualFittingRoom.Services
             try
             {
                 var normalizedGarmentArea = NormalizeGarmentArea(garmentArea);
-                personImage = ResizeImageForInference(personImage, 576, 72);
-                clothingImage = ResizeImageForInference(clothingImage, 512, 72);
+                personImage = ResizeImageForInference(personImage, 900, 84);
+                clothingImage = ResizeImageForInference(clothingImage, 700, 84);
 
                 return await RunAgainstHuggingFaceSpaceAsync(
                     personImage,
@@ -228,7 +227,7 @@ namespace VirtualFittingRoom.Services
                     BuildGarmentDescription(garmentArea, clothingType, garmentView),
                     _options.HuggingFaceAutoMask,
                     _options.HuggingFaceAutoCrop,
-                    Math.Clamp(_options.HuggingFaceDenoiseSteps, 8, 24),
+                    Math.Clamp(_options.HuggingFaceDenoiseSteps, 10, 50),
                     _options.HuggingFaceSeed
                 };
 
@@ -509,8 +508,6 @@ namespace VirtualFittingRoom.Services
             byte[] personImage,
             byte[] clothingImage,
             string garmentArea,
-            string? clothingType,
-            string? garmentView,
             CancellationToken cancellationToken)
         {
             var serverState = await _serverManager.EnsureServerReadyAsync(cancellationToken);
@@ -526,9 +523,7 @@ namespace VirtualFittingRoom.Services
             {
                 personImageBase64 = Convert.ToBase64String(personImage),
                 clothingImageBase64 = Convert.ToBase64String(clothingImage),
-                category = garmentArea,
-                clothingType = NormalizeClothingType(clothingType),
-                garmentView = NormalizeGarmentView(garmentView)
+                category = garmentArea
             };
 
             using var response = await PostLocalTryOnAsync(client, request, cancellationToken);
@@ -667,7 +662,7 @@ namespace VirtualFittingRoom.Services
             {
                 return normalizedType switch
                 {
-                    "t-shirt" => $"{viewText} short-sleeve t-shirt worn naturally on the body with realistic fabric drape, preserve the source garment color, keep one centered front print without repeating it, round collar following the collarbone below the neck, shoulder seam to shoulder seam, sleeves wrapped on arms, fully replace the original upper garment, keep the face and natural neck unchanged",
+                    "t-shirt" => $"{viewText} t-shirt worn naturally on the body with realistic fabric drape, round collar following the collarbone below the neck, shoulder seam to shoulder seam, sleeves wrapped on arms, keep the face and neck unchanged, not pasted as a flat sticker",
                     "tank-top" => $"{viewText} sleeveless tank top aligned {neckText}, shoulder strap to shoulder, chest panel to torso",
                     "shirt" => $"{viewText} shirt aligned {neckText}, shoulder to shoulder, elbow to elbow",
                     "chemise" => $"{viewText} chemise blouse aligned {neckText}, shoulder to shoulder, sleeve to arm",
@@ -1205,7 +1200,7 @@ namespace VirtualFittingRoom.Services
 
             if (message.Contains("copying content to a stream", StringComparison.OrdinalIgnoreCase))
             {
-                message += " The AI backend closed the connection while ASP.NET was sending or reading the images. Restart the app/backend and try again with smaller images.";
+                message += " This usually means the local AI server closed the connection while ASP.NET was sending the images. Check that the Python inference server is still running and that the selected images are valid.";
             }
 
             if (message.Contains("No such host is known", StringComparison.OrdinalIgnoreCase) ||
