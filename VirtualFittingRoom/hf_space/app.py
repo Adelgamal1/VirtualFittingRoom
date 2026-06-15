@@ -8,7 +8,7 @@ import gradio as gr
 import spaces
 import torch
 from huggingface_hub import snapshot_download
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageStat
 
 
 SPACE_ROOT = Path(__file__).resolve().parent
@@ -235,6 +235,205 @@ def protect_identity_regions(mask: Image.Image, category: str, pose_landmarks_da
     return mask
 
 
+def mean_abs_difference(image_a: Image.Image, image_b: Image.Image, box) -> float:
+    try:
+        crop_a = image_a.crop(box).resize((64, 64)).convert("RGB")
+        crop_b = image_b.crop(box).resize((64, 64)).convert("RGB")
+        diff = ImageChops.difference(crop_a, crop_b)
+        stat = ImageStat.Stat(diff)
+        return sum(stat.mean) / 3.0
+    except Exception:
+        return 0.0
+
+
+def is_unstable_tryon_result(result: Image.Image, person_image: Image.Image, pose_landmarks_data=None) -> bool:
+    result = result.convert("RGB")
+    person_image = person_image.convert("RGB")
+    if result.size != person_image.size:
+        result = result.resize(person_image.size, Image.LANCZOS)
+
+    width, height = person_image.size
+    pose = read_pose_landmarks(pose_landmarks_data, person_image.size)
+    if pose:
+        shoulder_width = pose["shoulder_width"]
+        collar_y = int(pose["collar_y"])
+        protected_bottom = max(1, int(collar_y - shoulder_width * 0.12))
+    else:
+        protected_bottom = max(1, int(height * 0.22))
+
+    head_diff = mean_abs_difference(result, person_image, (0, 0, width, protected_bottom))
+    if head_diff > 34:
+        return True
+
+    # A very large change in the whole upper frame usually means the diffusion model
+    # repeated the garment as a collage instead of fitting it on the torso.
+    upper_diff = mean_abs_difference(result, person_image, (0, 0, width, int(height * 0.72)))
+    return upper_diff > 82
+
+
+def garment_foreground_bbox(image: Image.Image):
+    image = image.convert("RGB")
+    width, height = image.size
+    min_x, min_y = width, height
+    max_x, max_y = -1, -1
+    pixels = image.load()
+    for y in range(0, height, 2):
+        for x in range(0, width, 2):
+            r, g, b = pixels[x, y]
+            if r > 238 and g > 238 and b > 238:
+                continue
+            if max(r, g, b) - min(r, g, b) < 4 and max(r, g, b) > 230:
+                continue
+            min_x = min(min_x, x)
+            min_y = min(min_y, y)
+            max_x = max(max_x, x)
+            max_y = max(max_y, y)
+
+    if max_x < min_x or max_y < min_y:
+        return (0, 0, width, height)
+    return (
+        max(0, min_x - 4),
+        max(0, min_y - 4),
+        min(width, max_x + 5),
+        min(height, max_y + 5),
+    )
+
+
+def estimate_garment_base_color(garment: Image.Image):
+    image = garment.convert("RGB").resize((180, 180))
+    colors = []
+    dark_colors = []
+    for r, g, b in image.getdata():
+        if r > 238 and g > 238 and b > 238:
+            continue
+        brightness = (r + g + b) / 3
+        colors.append((r, g, b))
+        if brightness < 95:
+            dark_colors.append((r, g, b))
+
+    sample = dark_colors if len(dark_colors) > 30 else colors
+    if not sample:
+        return (24, 24, 27)
+
+    sample = sorted(sample, key=lambda c: (c[0] + c[1] + c[2]))
+    mid = sample[len(sample) // 2]
+    return tuple(max(0, min(255, int(v))) for v in mid)
+
+
+def extract_front_print(garment: Image.Image, base_color):
+    image = garment.convert("RGB")
+    fg = garment_foreground_bbox(image)
+    crop = image.crop(fg)
+    width, height = crop.size
+    pixels = crop.load()
+    base_r, base_g, base_b = base_color
+    min_x, min_y = width, height
+    max_x, max_y = -1, -1
+
+    for y in range(height):
+        for x in range(width):
+            r, g, b = pixels[x, y]
+            if r > 242 and g > 242 and b > 242:
+                continue
+            distance = abs(r - base_r) + abs(g - base_g) + abs(b - base_b)
+            if distance < 70:
+                continue
+            min_x = min(min_x, x)
+            min_y = min(min_y, y)
+            max_x = max(max_x, x)
+            max_y = max(max_y, y)
+
+    if max_x < min_x or max_y < min_y:
+        min_x = int(width * 0.24)
+        max_x = int(width * 0.76)
+        min_y = int(height * 0.22)
+        max_y = int(height * 0.72)
+    else:
+        pad_x = int((max_x - min_x + 1) * 0.08)
+        pad_y = int((max_y - min_y + 1) * 0.08)
+        min_x = max(0, min_x - pad_x)
+        max_x = min(width - 1, max_x + pad_x)
+        min_y = max(0, min_y - pad_y)
+        max_y = min(height - 1, max_y + pad_y)
+
+    print_crop = crop.crop((min_x, min_y, max_x + 1, max_y + 1)).convert("RGBA")
+    alpha = Image.new("L", print_crop.size, 0)
+    alpha_pixels = alpha.load()
+    print_pixels = print_crop.load()
+    for y in range(print_crop.height):
+        for x in range(print_crop.width):
+            r, g, b, _ = print_pixels[x, y]
+            if r > 245 and g > 245 and b > 245:
+                continue
+            alpha_pixels[x, y] = 255
+    print_crop.putalpha(alpha.filter(ImageFilter.GaussianBlur(radius=0.4)))
+    return print_crop
+
+
+def render_controlled_upper_tryon(person_image: Image.Image, garment_image: Image.Image, pose_landmarks_data=None) -> Image.Image:
+    person = person_image.convert("RGBA")
+    width, height = person.size
+    pose = read_pose_landmarks(pose_landmarks_data, person.size)
+    if not pose:
+        return person_image.convert("RGB")
+
+    shoulder_width = pose["shoulder_width"]
+    center_x = int((pose["shoulder_center"][0] * 0.66) + (pose["hip_center"][0] * 0.34))
+    collar_y = int(pose["collar_y"])
+    shoulder_y = int(pose["shoulder_center"][1] - shoulder_width * 0.075)
+    base_color = estimate_garment_base_color(garment_image)
+
+    shirt_mask = build_fallback_mask(person_image, "upper", pose_landmarks_data)
+    shirt_mask = protect_identity_regions(shirt_mask, "upper", pose_landmarks_data)
+    shirt_mask = shirt_mask.filter(ImageFilter.GaussianBlur(radius=0.9))
+
+    shirt_layer = Image.new("RGBA", person.size, (0, 0, 0, 0))
+    shirt_fill = Image.new("RGBA", person.size, (*base_color, 245))
+    shirt_layer.paste(shirt_fill, (0, 0), shirt_mask)
+
+    shade = Image.new("RGBA", person.size, (0, 0, 0, 0))
+    shade_pixels = shade.load()
+    for x in range(width):
+        distance = abs(x - center_x) / max(1, shoulder_width)
+        alpha = int(max(0, min(42, (distance - 0.25) * 58)))
+        if alpha <= 0:
+            continue
+        for y in range(max(0, shoulder_y), min(height, int(shoulder_y + shoulder_width * 2.05)), 2):
+            shade_pixels[x, y] = (0, 0, 0, alpha)
+            if y + 1 < height:
+                shade_pixels[x, y + 1] = (0, 0, 0, alpha)
+    shirt_layer = Image.alpha_composite(shirt_layer, Image.composite(shade, Image.new("RGBA", person.size, (0, 0, 0, 0)), shirt_mask))
+
+    front_print = extract_front_print(garment_image, base_color)
+    target_w = int(shoulder_width * 0.62)
+    target_h = int(target_w * front_print.height / max(1, front_print.width))
+    max_h = int(shoulder_width * 0.88)
+    if target_h > max_h:
+        target_h = max_h
+        target_w = int(target_h * front_print.width / max(1, front_print.height))
+    target_w = max(24, target_w)
+    target_h = max(24, target_h)
+    front_print = front_print.resize((target_w, target_h), Image.LANCZOS)
+    print_x = int(center_x - target_w / 2)
+    print_y = int(collar_y + shoulder_width * 0.38)
+    shirt_layer.alpha_composite(front_print, (print_x, print_y))
+
+    draw = ImageDraw.Draw(shirt_layer)
+    collar_w = shoulder_width * 0.34
+    collar_h = shoulder_width * 0.15
+    collar_box = (
+        center_x - collar_w / 2,
+        collar_y - collar_h * 0.35,
+        center_x + collar_w / 2,
+        collar_y + collar_h * 0.70,
+    )
+    trim = tuple(max(0, min(255, int(channel * 0.72))) for channel in base_color)
+    draw.arc(collar_box, start=180, end=360, fill=(*trim, 235), width=max(2, int(shoulder_width * 0.026)))
+
+    result = Image.alpha_composite(person, shirt_layer)
+    return result.convert("RGB")
+
+
 def load_image_value(value) -> Image.Image | None:
     if value is None:
         return None
@@ -398,7 +597,10 @@ def run_tryon(
         width=runtime["width"],
         generator=generator,
     )
-    return results[0]
+    result = results[0]
+    if is_unstable_tryon_result(result, person_image, pose_landmarks_data):
+        return render_controlled_upper_tryon(person_image, cloth_image, pose_landmarks_data)
+    return result
 
 
 with gr.Blocks(title="Virtual Fitting Room") as demo:
