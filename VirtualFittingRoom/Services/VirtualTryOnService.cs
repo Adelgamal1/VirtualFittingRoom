@@ -68,8 +68,9 @@ namespace VirtualFittingRoom.Services
                 var normalizedGarmentArea = NormalizeGarmentArea(garmentArea);
                 var normalizedGarmentView = NormalizeGarmentView(garmentView);
                 var localMode = IsLocalMode();
-                personImage = ResizeImageForInference(personImage, localMode ? 560 : 900, 76);
-                clothingImage = ResizeImageForInference(clothingImage, localMode ? 420 : 700, 76);
+                var huggingFaceMode = IsHuggingFaceMode();
+                personImage = ResizeImageForInference(personImage, localMode ? 560 : huggingFaceMode ? 720 : 900, 76);
+                clothingImage = ResizeImageForInference(clothingImage, localMode ? 420 : huggingFaceMode ? 560 : 700, 76);
 
                 return IsApiMode()
                     ? await RunAgainstApiAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken, null, clothingType, normalizedGarmentView, poseLandmarksData)
@@ -77,7 +78,7 @@ namespace VirtualFittingRoom.Services
                     ? await RunAgainstReplicateAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken)
                     : IsHuggingFaceMode()
                     ? await RunAgainstHuggingFaceSpaceAsync(personImage, clothingImage, normalizedGarmentArea, clothingType, normalizedGarmentView, poseLandmarksData, cancellationToken)
-                    : await RunAgainstLocalServerAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken);
+                    : await RunAgainstLocalServerAsync(personImage, clothingImage, normalizedGarmentArea, clothingType, normalizedGarmentView, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -94,8 +95,8 @@ namespace VirtualFittingRoom.Services
             try
             {
                 var normalizedGarmentArea = NormalizeGarmentArea(garmentArea);
-                personImage = ResizeImageForInference(personImage, 900, 84);
-                clothingImage = ResizeImageForInference(clothingImage, 700, 84);
+                personImage = ResizeImageForInference(personImage, 720, 76);
+                clothingImage = ResizeImageForInference(clothingImage, 560, 76);
 
                 return await RunAgainstHuggingFaceSpaceAsync(
                     personImage,
@@ -227,7 +228,7 @@ namespace VirtualFittingRoom.Services
                     BuildGarmentDescription(garmentArea, clothingType, garmentView),
                     _options.HuggingFaceAutoMask,
                     _options.HuggingFaceAutoCrop,
-                    Math.Clamp(_options.HuggingFaceDenoiseSteps, 10, 50),
+                    Math.Clamp(_options.HuggingFaceDenoiseSteps, 8, 24),
                     _options.HuggingFaceSeed
                 };
 
@@ -508,6 +509,8 @@ namespace VirtualFittingRoom.Services
             byte[] personImage,
             byte[] clothingImage,
             string garmentArea,
+            string? clothingType,
+            string? garmentView,
             CancellationToken cancellationToken)
         {
             var serverState = await _serverManager.EnsureServerReadyAsync(cancellationToken);
@@ -523,7 +526,9 @@ namespace VirtualFittingRoom.Services
             {
                 personImageBase64 = Convert.ToBase64String(personImage),
                 clothingImageBase64 = Convert.ToBase64String(clothingImage),
-                category = garmentArea
+                category = garmentArea,
+                clothingType = NormalizeClothingType(clothingType),
+                garmentView = NormalizeGarmentView(garmentView)
             };
 
             using var response = await PostLocalTryOnAsync(client, request, cancellationToken);
@@ -662,7 +667,7 @@ namespace VirtualFittingRoom.Services
             {
                 return normalizedType switch
                 {
-                    "t-shirt" => $"{viewText} t-shirt worn naturally on the body with realistic fabric drape, round collar following the collarbone below the neck, shoulder seam to shoulder seam, sleeves wrapped on arms, keep the face and neck unchanged, not pasted as a flat sticker",
+                    "t-shirt" => $"{viewText} t-shirt worn naturally on the body with realistic fabric drape, preserve the source garment color and printed logo exactly, round collar following the collarbone below the neck, shoulder seam to shoulder seam, sleeves wrapped on arms, fully replace the original upper garment, keep the face and natural neck unchanged, not pasted as a flat sticker",
                     "tank-top" => $"{viewText} sleeveless tank top aligned {neckText}, shoulder strap to shoulder, chest panel to torso",
                     "shirt" => $"{viewText} shirt aligned {neckText}, shoulder to shoulder, elbow to elbow",
                     "chemise" => $"{viewText} chemise blouse aligned {neckText}, shoulder to shoulder, sleeve to arm",

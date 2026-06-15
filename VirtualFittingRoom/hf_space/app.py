@@ -119,34 +119,34 @@ def build_fallback_mask(image: Image.Image, category: str, pose_landmarks_data=N
     if category == "upper":
         if pose:
             shoulder_width = pose["shoulder_width"]
-            shoulder_y = int(pose["shoulder_center"][1] - (shoulder_width * 0.075))
+            shoulder_y = int(pose["shoulder_center"][1] - (shoulder_width * 0.09))
             collar_y = int(pose["collar_y"])
             waist_y = pose["shoulder_center"][1] + (pose["torso_height"] * 0.58)
             hem_y = int(min(height * 0.84, waist_y + (shoulder_width * 0.08)))
             center = int((pose["shoulder_center"][0] * 0.64) + (pose["hip_center"][0] * 0.36))
             left_shoulder_x = int(pose["left_shoulder"][0])
             right_shoulder_x = int(pose["right_shoulder"][0])
-            left = int(max(0, left_shoulder_x - (shoulder_width * 0.46)))
-            right = int(min(width, right_shoulder_x + (shoulder_width * 0.46)))
-            bottom_half = int(max(shoulder_width * 0.50, abs(pose["right_hip"][0] - pose["left_hip"][0]) * 0.62))
+            left = int(max(0, left_shoulder_x - (shoulder_width * 0.54)))
+            right = int(min(width, right_shoulder_x + (shoulder_width * 0.54)))
+            bottom_half = int(max(shoulder_width * 0.52, abs(pose["right_hip"][0] - pose["left_hip"][0]) * 0.64))
 
             shirt_shape = [
-                (left, int(shoulder_y + shoulder_width * 0.16)),
-                (int(left_shoulder_x - shoulder_width * 0.06), collar_y),
+                (left, int(shoulder_y + shoulder_width * 0.18)),
+                (int(left_shoulder_x - shoulder_width * 0.04), collar_y),
                 (int(center - shoulder_width * 0.22), int(collar_y - shoulder_width * 0.035)),
                 (int(center + shoulder_width * 0.22), int(collar_y - shoulder_width * 0.035)),
-                (int(right_shoulder_x + shoulder_width * 0.06), collar_y),
-                (right, int(shoulder_y + shoulder_width * 0.16)),
+                (int(right_shoulder_x + shoulder_width * 0.04), collar_y),
+                (right, int(shoulder_y + shoulder_width * 0.18)),
                 (int(center + bottom_half), hem_y),
                 (int(center - bottom_half), hem_y),
             ]
             draw.polygon(shirt_shape, fill=255)
 
             neck_cutout = (
-                int(center - shoulder_width * 0.155),
-                int(collar_y - shoulder_width * 0.075),
-                int(center + shoulder_width * 0.155),
-                int(collar_y + shoulder_width * 0.070),
+                int(center - shoulder_width * 0.120),
+                int(collar_y - shoulder_width * 0.065),
+                int(center + shoulder_width * 0.120),
+                int(collar_y + shoulder_width * 0.028),
             )
             draw.ellipse(neck_cutout, fill=0)
         else:
@@ -180,7 +180,7 @@ def build_fallback_mask(image: Image.Image, category: str, pose_landmarks_data=N
         box = (int(width * 0.16), int(height * 0.06), int(width * 0.84), int(height * 0.96))
         draw.rounded_rectangle(box, radius=max(12, width // 16), fill=255)
     if category == "upper":
-        mask = mask.filter(ImageFilter.GaussianBlur(radius=1.2))
+        mask = mask.filter(ImageFilter.GaussianBlur(radius=0.8))
     return mask
 
 
@@ -207,13 +207,13 @@ def protect_identity_regions(mask: Image.Image, category: str, pose_landmarks_da
         shoulder_width = pose["shoulder_width"]
         center_x = int(pose["shoulder_center"][0])
         collar_y = int(pose["collar_y"])
-        draw.rectangle((0, 0, width, max(0, int(collar_y - shoulder_width * 0.18))), fill=255)
+        draw.rectangle((0, 0, width, max(0, int(collar_y - shoulder_width * 0.20))), fill=255)
         draw.ellipse(
             (
-                int(center_x - shoulder_width * 0.16),
-                int(collar_y - shoulder_width * 0.16),
-                int(center_x + shoulder_width * 0.16),
-                int(collar_y + shoulder_width * 0.07),
+                int(center_x - shoulder_width * 0.115),
+                int(collar_y - shoulder_width * 0.135),
+                int(center_x + shoulder_width * 0.115),
+                int(collar_y + shoulder_width * 0.010),
             ),
             fill=255,
         )
@@ -337,7 +337,7 @@ def load_runtime():
         "device": device,
         "width": 384,
         "height": 512,
-        "steps": 8,
+        "steps": 12,
         "guidance_scale": 2.0,
     }
 
@@ -359,7 +359,7 @@ def run_tryon(
     garment_description="Upper body clothing garment",
     auto_mask=True,
     auto_crop=False,
-    denoise_steps=20,
+    denoise_steps=12,
     seed=555,
     pose_landmarks_data="",
 ):
@@ -392,7 +392,7 @@ def run_tryon(
         person_image,
         cloth_image,
         mask,
-        num_inference_steps=int(denoise_steps),
+        num_inference_steps=max(8, min(24, int(denoise_steps))),
         guidance_scale=runtime["guidance_scale"],
         height=runtime["height"],
         width=runtime["width"],
@@ -430,7 +430,7 @@ with gr.Blocks(title="Virtual Fitting Room") as demo:
         auto_crop_input = gr.Checkbox(value=False, label="Auto Crop")
 
     with gr.Row():
-        denoise_steps_input = gr.Slider(10, 50, value=20, step=1, label="Denoise Steps")
+        denoise_steps_input = gr.Slider(8, 30, value=12, step=1, label="Denoise Steps")
         seed_input = gr.Number(value=555, precision=0, label="Seed")
     pose_landmarks_input = gr.Textbox(value="", visible=False, label="Pose Landmarks")
 
