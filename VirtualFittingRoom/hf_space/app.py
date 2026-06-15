@@ -17,9 +17,9 @@ BASE_MODEL_PATH_RAW = os.getenv("CATVTON_BASE_MODEL_PATH", "").strip()
 RESUME_PATH_RAW = os.getenv("CATVTON_RESUME_PATH", "").strip()
 ATTN_VERSION = os.getenv("CATVTON_ATTN_VERSION", "mix")
 MODEL_REPO_ID = os.getenv("CATVTON_MODEL_REPO_ID", "Adelgamal1/virtual-fitting-room-model")
-CPU_INFERENCE_WIDTH = int(os.getenv("CATVTON_CPU_WIDTH", "320"))
-CPU_INFERENCE_HEIGHT = int(os.getenv("CATVTON_CPU_HEIGHT", "448"))
-CPU_INFERENCE_STEPS = int(os.getenv("CATVTON_CPU_STEPS", "10"))
+CPU_INFERENCE_WIDTH = int(os.getenv("CATVTON_CPU_WIDTH", "384"))
+CPU_INFERENCE_HEIGHT = int(os.getenv("CATVTON_CPU_HEIGHT", "512"))
+CPU_INFERENCE_STEPS = int(os.getenv("CATVTON_CPU_STEPS", "14"))
 GPU_INFERENCE_WIDTH = int(os.getenv("CATVTON_GPU_WIDTH", "384"))
 GPU_INFERENCE_HEIGHT = int(os.getenv("CATVTON_GPU_HEIGHT", "512"))
 GPU_INFERENCE_STEPS = int(os.getenv("CATVTON_GPU_STEPS", "16"))
@@ -372,7 +372,7 @@ def run_tryon(
     garment_description="Upper body clothing garment",
     auto_mask=True,
     auto_crop=False,
-    denoise_steps=10,
+    denoise_steps=14,
     seed=555,
     pose_landmarks_data="",
 ):
@@ -401,13 +401,13 @@ def run_tryon(
     generator.manual_seed(int(seed))
 
     requested_steps = int(denoise_steps)
-    max_steps = 24 if runtime["device"] == "cuda" else 14
+    max_steps = 24 if runtime["device"] == "cuda" else 18
     with torch.inference_mode():
         results = runtime["pipeline"](
             person_image,
             cloth_image,
             mask,
-            num_inference_steps=max(6, min(max_steps, requested_steps)),
+            num_inference_steps=max(10, min(max_steps, requested_steps)),
             guidance_scale=runtime["guidance_scale"],
             height=runtime["height"],
             width=runtime["width"],
@@ -448,7 +448,7 @@ with gr.Blocks(title="Virtual Fitting Room") as demo:
         auto_crop_input = gr.Checkbox(value=False, label="Auto Crop")
 
     with gr.Row():
-        denoise_steps_input = gr.Slider(6, 24, value=10, step=1, label="Denoise Steps")
+        denoise_steps_input = gr.Slider(10, 24, value=14, step=1, label="Denoise Steps")
         seed_input = gr.Number(value=555, precision=0, label="Seed")
     pose_landmarks_input = gr.Textbox(value="", visible=False, label="Pose Landmarks")
 
