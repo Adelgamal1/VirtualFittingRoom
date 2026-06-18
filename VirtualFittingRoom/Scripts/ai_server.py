@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import torch
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 
 def find_project_bundle(project_root: Path) -> Path:
@@ -42,14 +42,61 @@ def build_fallback_mask(image: Image.Image, category: str) -> Image.Image:
     draw = ImageDraw.Draw(mask)
 
     if category == "upper":
-        box = (int(width * 0.18), int(height * 0.08), int(width * 0.82), int(height * 0.58))
+        draw.polygon(
+            [
+                (int(width * 0.22), int(height * 0.18)),
+                (int(width * 0.78), int(height * 0.18)),
+                (int(width * 0.72), int(height * 0.61)),
+                (int(width * 0.28), int(height * 0.61)),
+            ],
+            fill=255,
+        )
+        draw.rounded_rectangle(
+            (int(width * 0.14), int(height * 0.19), int(width * 0.36), int(height * 0.38)),
+            radius=max(8, width // 28),
+            fill=255,
+        )
+        draw.rounded_rectangle(
+            (int(width * 0.64), int(height * 0.19), int(width * 0.86), int(height * 0.38)),
+            radius=max(8, width // 28),
+            fill=255,
+        )
     elif category == "lower":
         box = (int(width * 0.22), int(height * 0.42), int(width * 0.78), int(height * 0.96))
+        draw.rounded_rectangle(box, radius=max(12, width // 16), fill=255)
     else:
         box = (int(width * 0.16), int(height * 0.06), int(width * 0.84), int(height * 0.96))
+        draw.rounded_rectangle(box, radius=max(12, width // 16), fill=255)
 
-    draw.rounded_rectangle(box, radius=max(12, width // 16), fill=255)
-    return mask
+    return refine_mask(mask, image, category)
+
+
+def refine_mask(mask: Image.Image, image: Image.Image, category: str) -> Image.Image:
+    if category != "upper":
+        return mask.filter(ImageFilter.GaussianBlur(1)).point(lambda value: 255 if value > 72 else 0)
+
+    width, height = image.size
+    support = Image.new("L", (width, height), 0)
+    draw = ImageDraw.Draw(support)
+    draw.polygon(
+        [
+            (int(width * 0.12), int(height * 0.16)),
+            (int(width * 0.88), int(height * 0.16)),
+            (int(width * 0.74), int(height * 0.64)),
+            (int(width * 0.26), int(height * 0.64)),
+        ],
+        fill=255,
+    )
+
+    neck_protect = Image.new("L", (width, height), 0)
+    draw_neck = ImageDraw.Draw(neck_protect)
+    draw_neck.ellipse((int(width * 0.40), int(height * 0.08), int(width * 0.60), int(height * 0.25)), fill=255)
+    draw_neck.rectangle((0, 0, width, int(height * 0.10)), fill=255)
+
+    mask = ImageChops.multiply(mask.convert("L"), support)
+    mask = ImageChops.subtract(mask, neck_protect)
+    mask = mask.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(2))
+    return mask.point(lambda value: 255 if value > 64 else 0)
 
 
 def parse_args():
@@ -158,7 +205,7 @@ def run_tryon(runtime, person_bytes: bytes, cloth_bytes: bytes, category: str) -
 
     if runtime["masker"] is not None:
         mask_result = runtime["masker"](person_image, mask_type=category)
-        mask = mask_result["mask"]
+        mask = refine_mask(mask_result["mask"], person_image, category)
     else:
         mask = build_fallback_mask(person_image, category)
 

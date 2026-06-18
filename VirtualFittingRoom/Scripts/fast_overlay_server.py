@@ -50,6 +50,15 @@ def pil_to_bgr(image: Image.Image) -> np.ndarray:
     return cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2BGR)
 
 
+def pil_to_bgr_and_alpha(image: Image.Image) -> tuple[np.ndarray, np.ndarray | None]:
+    rgba = np.array(image.convert("RGBA"))
+    bgr = cv2.cvtColor(rgba[:, :, :3], cv2.COLOR_RGB2BGR)
+    alpha = rgba[:, :, 3]
+    if int(alpha.min()) >= 250:
+        return bgr, None
+    return bgr, alpha
+
+
 def bgr_to_pil(image: np.ndarray) -> Image.Image:
     return Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
@@ -65,7 +74,31 @@ def fit_image(image: Image.Image, max_side: int = 900) -> Image.Image:
     return image.resize(new_size, Image.Resampling.LANCZOS)
 
 
-def remove_white_background(garment_bgr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def crop_to_mask(garment_bgr: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
+    coords = cv2.findNonZero(mask)
+    if coords is None or cv2.countNonZero(mask) < int(mask.size * 0.02):
+        return None
+
+    x, y, w, h = cv2.boundingRect(coords)
+    pad = max(3, int(max(w, h) * 0.015))
+    x0 = max(0, x - pad)
+    y0 = max(0, y - pad)
+    x1 = min(garment_bgr.shape[1], x + w + pad)
+    y1 = min(garment_bgr.shape[0], y + h + pad)
+    return garment_bgr[y0:y1, x0:x1], mask[y0:y1, x0:x1]
+
+
+def remove_white_background(garment_bgr: np.ndarray, alpha_mask: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    if alpha_mask is not None:
+        mask = cv2.threshold(alpha_mask, 96, 255, cv2.THRESH_BINARY)[1]
+        kernel = np.ones((3, 3), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+        mask = cv2.GaussianBlur(mask, (3, 3), 0)
+        cropped = crop_to_mask(garment_bgr, mask)
+        if cropped is not None:
+            return cropped
+
     garment_rgb = cv2.cvtColor(garment_bgr, cv2.COLOR_BGR2RGB)
     lower = np.array([0, 0, 0], dtype=np.uint8)
     upper = np.array([242, 242, 242], dtype=np.uint8)
@@ -80,8 +113,9 @@ def remove_white_background(garment_bgr: np.ndarray) -> tuple[np.ndarray, np.nda
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
     mask = cv2.GaussianBlur(mask, (5, 5), 0)
 
+    cropped = crop_to_mask(garment_bgr, mask)
     coords = cv2.findNonZero(mask)
-    if coords is None or cv2.countNonZero(mask) < int(mask.size * 0.02):
+    if cropped is None:
         rect_margin_x = max(4, int(garment_bgr.shape[1] * 0.04))
         rect_margin_y = max(4, int(garment_bgr.shape[0] * 0.03))
         grabcut_mask = np.zeros(garment_bgr.shape[:2], dtype=np.uint8)
@@ -103,17 +137,15 @@ def remove_white_background(garment_bgr: np.ndarray) -> tuple[np.ndarray, np.nda
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
             mask = cv2.GaussianBlur(mask, (5, 5), 0)
             coords = cv2.findNonZero(mask)
+            cropped = crop_to_mask(garment_bgr, mask)
         except Exception:
             coords = None
 
-    if coords is None:
+    if cropped is None or coords is None:
         full_mask = np.full(garment_bgr.shape[:2], 255, dtype=np.uint8)
         return garment_bgr, full_mask
 
-    x, y, w, h = cv2.boundingRect(coords)
-    cropped_garment = garment_bgr[y:y + h, x:x + w]
-    cropped_mask = mask[y:y + h, x:x + w]
-    return cropped_garment, cropped_mask
+    return cropped
 
 
 def detect_face(person_bgr: np.ndarray) -> tuple[int, int, int, int] | None:
@@ -127,23 +159,26 @@ def detect_face(person_bgr: np.ndarray) -> tuple[int, int, int, int] | None:
     return max(faces, key=lambda face: face[2] * face[3])
 
 
-def estimate_upper_body_quad(person_bgr: np.ndarray) -> np.ndarray:
+def estimate_upper_body_quad(person_bgr: np.ndarray, clothing_type: str = "") -> np.ndarray:
     height, width = person_bgr.shape[:2]
     face = detect_face(person_bgr)
+    is_tshirt = clothing_type == "t-shirt"
+    is_jersey = clothing_type == "jersey"
 
     if face is not None:
         x, y, w, h = face
         center_x = x + (w / 2.0)
-        shoulders_y = y + (h * 1.95)
-        waist_y = y + (h * 5.25)
-        top_half_width = w * 1.2
-        bottom_half_width = top_half_width * 0.78
+        face_bottom = y + h
+        shoulders_y = max(face_bottom + (h * 0.58), height * 0.30)
+        waist_y = shoulders_y + (h * (2.50 if is_tshirt else (2.35 if is_jersey else 2.85)))
+        top_half_width = w * (1.50 if is_tshirt else (1.48 if is_jersey else 1.55))
+        bottom_half_width = top_half_width * (0.82 if is_tshirt else (0.78 if is_jersey else 0.82))
     else:
         center_x = width * 0.5
-        shoulders_y = height * 0.21
-        waist_y = height * 0.66
-        top_half_width = width * 0.17
-        bottom_half_width = width * 0.14
+        shoulders_y = height * (0.36 if is_tshirt else (0.34 if is_jersey else 0.34))
+        waist_y = height * (0.80 if is_tshirt else (0.72 if is_jersey else 0.80))
+        top_half_width = width * (0.28 if is_tshirt else (0.27 if is_jersey else 0.28))
+        bottom_half_width = width * (0.23 if is_tshirt else (0.21 if is_jersey else 0.22))
 
     shoulders_y = max(0.0, min(float(height - 1), shoulders_y))
     waist_y = max(shoulders_y + 30.0, min(float(height - 1), waist_y))
@@ -163,7 +198,24 @@ def estimate_upper_body_quad(person_bgr: np.ndarray) -> np.ndarray:
     return quad
 
 
-def estimate_pose_quad(person_bgr: np.ndarray, category: str) -> np.ndarray | None:
+def normalize_clothing_type(value: str | None) -> str:
+    text = (value or "").strip().lower().replace(" ", "-").replace("_", "-")
+    return {
+        "tee": "t-shirt",
+        "tshirt": "t-shirt",
+        "t-shirts": "t-shirt",
+        "sports-shirt": "jersey",
+        "sport-shirt": "jersey",
+        "hockey-jersey": "jersey",
+        "football-jersey": "jersey",
+        "basketball-jersey": "jersey",
+        "tanktop": "tank-top",
+        "sleeveless": "tank-top",
+        "sleeveless-shirt": "tank-top",
+    }.get(text, text)
+
+
+def estimate_pose_quad(person_bgr: np.ndarray, category: str, clothing_type: str = "") -> np.ndarray | None:
     if MP_POSE is None:
         return None
 
@@ -207,10 +259,15 @@ def estimate_pose_quad(person_bgr: np.ndarray, category: str) -> np.ndarray | No
     hip_width = max(float(np.linalg.norm(right_hip - left_hip)), shoulder_width * 0.72)
 
     torso_vector = hip_center - shoulder_center
-    top_center = shoulder_center + (torso_vector * 0.07)
-    upper_bottom_center = shoulder_center + (torso_vector * 0.98)
-    top_half = shoulder_width * 0.86
-    bottom_half = max(hip_width * 0.55, shoulder_width * 0.50)
+    is_tshirt = clothing_type == "t-shirt"
+    is_jersey = clothing_type == "jersey"
+    top_center = shoulder_center + (torso_vector * (-0.03 if is_tshirt else (-0.02 if is_jersey else 0.07)))
+    upper_bottom_center = shoulder_center + (torso_vector * (0.88 if is_tshirt else (0.76 if is_jersey else 0.98)))
+    top_half = shoulder_width * (0.76 if is_tshirt else (0.78 if is_jersey else 0.86))
+    bottom_half = max(
+        hip_width * (0.52 if is_tshirt else (0.50 if is_jersey else 0.55)),
+        shoulder_width * (0.52 if is_tshirt else (0.48 if is_jersey else 0.50)),
+    )
 
     if category == "lower":
         knee_left = point(25)
@@ -284,8 +341,8 @@ def estimate_lower_body_quad(person_bgr: np.ndarray) -> np.ndarray:
     return quad
 
 
-def estimate_target_quad(person_bgr: np.ndarray, category: str) -> np.ndarray:
-    pose_quad = estimate_pose_quad(person_bgr, category)
+def estimate_target_quad(person_bgr: np.ndarray, category: str, clothing_type: str = "") -> np.ndarray:
+    pose_quad = estimate_pose_quad(person_bgr, category, clothing_type)
     if pose_quad is not None:
         height, width = person_bgr.shape[:2]
         pose_quad[:, 0] = np.clip(pose_quad[:, 0], 0, width - 1)
@@ -295,7 +352,7 @@ def estimate_target_quad(person_bgr: np.ndarray, category: str) -> np.ndarray:
     if category == "lower":
         return estimate_lower_body_quad(person_bgr)
     if category == "overall":
-        upper = estimate_upper_body_quad(person_bgr)
+        upper = estimate_upper_body_quad(person_bgr, clothing_type)
         lower = estimate_lower_body_quad(person_bgr)
         return np.array(
             [
@@ -306,7 +363,7 @@ def estimate_target_quad(person_bgr: np.ndarray, category: str) -> np.ndarray:
             ],
             dtype=np.float32,
         )
-    return estimate_upper_body_quad(person_bgr)
+    return estimate_upper_body_quad(person_bgr, clothing_type)
 
 
 def apply_body_lighting(person_bgr: np.ndarray, warped_garment: np.ndarray, solid_mask: np.ndarray) -> np.ndarray:
@@ -361,12 +418,71 @@ def build_worn_composite(person_bgr: np.ndarray, warped_garment: np.ndarray, war
     return np.clip(composite, 0, 255).astype(np.uint8)
 
 
-def warp_garment_to_person(person_bgr: np.ndarray, garment_bgr: np.ndarray, category: str) -> np.ndarray:
-    garment_bgr, garment_mask = remove_white_background(garment_bgr)
+def build_fit_silhouette(size: tuple[int, int], dst_points: np.ndarray, category: str, clothing_type: str) -> np.ndarray:
+    width, height = size
+    silhouette = np.zeros((height, width), dtype=np.uint8)
+    if category == "upper" and clothing_type == "t-shirt":
+        top_left, top_right, hem_right, hem_left = dst_points
+        center_x = float(np.mean(dst_points[:, 0]))
+        top_y = float((top_left[1] + top_right[1]) / 2.0)
+        hem_y = float((hem_left[1] + hem_right[1]) / 2.0)
+        garment_height = max(1.0, hem_y - top_y)
+        shoulder_half = max(1.0, abs(top_right[0] - top_left[0]) / 2.0)
+        hem_half = max(1.0, abs(hem_right[0] - hem_left[0]) / 2.0)
+
+        points = np.array(
+            [
+                [center_x - shoulder_half, top_y + garment_height * 0.20],
+                [center_x - shoulder_half * 0.62, top_y],
+                [center_x + shoulder_half * 0.62, top_y],
+                [center_x + shoulder_half, top_y + garment_height * 0.20],
+                [center_x + hem_half, hem_y],
+                [center_x - hem_half, hem_y],
+            ],
+            dtype=np.int32,
+        )
+        cv2.fillPoly(silhouette, [points], 255)
+
+        neck_width = max(16, int(shoulder_half * 0.46))
+        neck_height = max(8, int(garment_height * 0.11))
+        neck_center = (int(center_x), int(top_y + neck_height * 0.65))
+        cv2.ellipse(silhouette, neck_center, (neck_width // 2, neck_height), 0, 0, 360, 0, -1)
+
+        kernel_size = max(5, int(width * 0.010))
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        kernel = np.ones((kernel_size, kernel_size), np.uint8)
+        silhouette = cv2.morphologyEx(silhouette, cv2.MORPH_CLOSE, kernel, iterations=1)
+        silhouette = cv2.GaussianBlur(silhouette, (kernel_size, kernel_size), 0)
+        return silhouette
+
+    points = dst_points.astype(np.int32)
+    cv2.fillConvexPoly(silhouette, points, 255)
+    return silhouette
+
+
+def warp_garment_to_person(
+    person_bgr: np.ndarray,
+    garment_bgr: np.ndarray,
+    category: str,
+    alpha_mask: np.ndarray | None = None,
+    clothing_type: str = "",
+) -> np.ndarray:
+    garment_bgr, garment_mask = remove_white_background(garment_bgr, alpha_mask)
     person_h, person_w = person_bgr.shape[:2]
     garment_h, garment_w = garment_bgr.shape[:2]
 
-    if category == "upper":
+    if category == "upper" and clothing_type == "t-shirt":
+        src_points = np.array(
+            [
+                [garment_w * 0.06, garment_h * 0.08],
+                [garment_w * 0.94, garment_h * 0.08],
+                [garment_w * 0.66, garment_h * 0.94],
+                [garment_w * 0.34, garment_h * 0.94],
+            ],
+            dtype=np.float32,
+        )
+    elif category == "upper":
         src_points = np.array(
             [
                 [garment_w * 0.06, garment_h * 0.20],
@@ -397,7 +513,7 @@ def warp_garment_to_person(person_bgr: np.ndarray, garment_bgr: np.ndarray, cate
             dtype=np.float32,
         )
 
-    dst_points = estimate_target_quad(person_bgr, category)
+    dst_points = estimate_target_quad(person_bgr, category, clothing_type)
 
     matrix = cv2.getPerspectiveTransform(src_points, dst_points)
     warped_garment = cv2.warpPerspective(
@@ -416,17 +532,20 @@ def warp_garment_to_person(person_bgr: np.ndarray, garment_bgr: np.ndarray, cate
         borderMode=cv2.BORDER_CONSTANT,
         borderValue=0,
     )
+    if alpha_mask is None:
+        fit_silhouette = build_fit_silhouette((person_w, person_h), dst_points, category, clothing_type)
+        warped_mask = cv2.min(warped_mask, fit_silhouette)
 
     return build_worn_composite(person_bgr, warped_garment, warped_mask)
 
 
-def run_tryon(person_bytes: bytes, cloth_bytes: bytes, category: str) -> bytes:
+def run_tryon(person_bytes: bytes, cloth_bytes: bytes, category: str, clothing_type: str = "") -> bytes:
     person_image = fit_image(Image.open(io.BytesIO(person_bytes)).convert("RGB"))
-    cloth_image = fit_image(Image.open(io.BytesIO(cloth_bytes)).convert("RGB"), max_side=700)
+    cloth_image = fit_image(Image.open(io.BytesIO(cloth_bytes)).convert("RGBA"), max_side=700)
 
     person_bgr = pil_to_bgr(person_image)
-    cloth_bgr = pil_to_bgr(cloth_image)
-    result_bgr = warp_garment_to_person(person_bgr, cloth_bgr, category)
+    cloth_bgr, cloth_alpha = pil_to_bgr_and_alpha(cloth_image)
+    result_bgr = warp_garment_to_person(person_bgr, cloth_bgr, category, cloth_alpha, normalize_clothing_type(clothing_type))
 
     output = io.BytesIO()
     bgr_to_pil(result_bgr).save(output, format="PNG")
@@ -456,8 +575,9 @@ class TryOnHandler(BaseHTTPRequestHandler):
             person_image = base64.b64decode(payload["personImageBase64"])
             clothing_image = base64.b64decode(payload["clothingImageBase64"])
             category = payload.get("category", "upper")
+            clothing_type = payload.get("clothingType", "")
 
-            output_bytes = run_tryon(person_image, clothing_image, category)
+            output_bytes = run_tryon(person_image, clothing_image, category, clothing_type)
             return self._write_json(200, {
                 "outputImageBase64": base64.b64encode(output_bytes).decode("utf-8")
             })

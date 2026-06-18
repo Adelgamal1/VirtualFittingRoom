@@ -1,0 +1,241 @@
+Egyptian E-Learning University
+Faculty of Computers & Information Technology
+Virtual Fitting Room
+By
+Supervised by
+Dr.Ahmed Hamza
+Assistant
+Eng.Bassant Mohamed
+Sadat-2025
+Abstract
+The continuous growth of e-commerce platforms has significantly transformed the fashion retail industry, allowing customers to browse and purchase clothing products from anywhere at any time. Despite these advantages, one of the major challenges facing online fashion shopping is the inability of customers to physically try on garments before making purchasing decisions. This limitation often leads to uncertainty regarding garment appearance, fitting, and overall satisfaction, resulting in increased product return rates and additional operational costs for retailers. Consequently, the development of intelligent Virtual Fitting Room systems has become an important research area within the fields of computer vision, artificial intelligence, and digital fashion technologies.
+This project presents the design and implementation of a Virtual Fitting Room system capable of generating realistic virtual try-on results using a user image and a target garment image. The proposed system aims to provide users with a visual representation of how a selected garment may appear on their body without requiring physical interaction with the product. By leveraging recent advancements in deep learning and image synthesis techniques, the system enables realistic garment transfer while preserving the user's body structure, identity characteristics, and overall visual consistency.
+The developed solution follows a multi-stage processing pipeline that begins with image acquisition and preprocessing. User images and garment images are prepared and validated before being processed by the virtual try-on engine. The system then performs garment alignment, appearance preservation, and image synthesis to generate a final output image that realistically combines the user's appearance with the selected clothing item. Special attention is given to maintaining garment details, body proportions, and natural visual transitions between different image regions to improve realism and user experience.
+To ensure practical usability, the system was deployed through a web-based architecture that allows users to interact with the application using a simple and intuitive interface. The backend infrastructure was implemented using modern web technologies and integrated with the image generation pipeline to provide automated processing and result delivery. Various test cases were conducted using different clothing categories and user images to evaluate the effectiveness of the proposed solution.
+The experimental results demonstrate the capability of the system to generate visually coherent and realistic virtual try-on images across a variety of scenarios. The generated outputs successfully preserve garment characteristics and user identity while maintaining acceptable image quality and consistency. These findings confirm the effectiveness of the proposed approach and highlight its potential for enhancing online shopping experiences. Furthermore, the project establishes a strong foundation for future extensions, including real-time virtual try-on, mobile deployment, augmented reality integration, and personalized fashion recommendation systems.
+Keywords: Virtual Fitting Room, Virtual Try-On, Computer Vision, Deep Learning, Image Synthesis, Diffusion Models, Fashion Technology, E-Commerce.
+Acknowledgments
+First and foremost, we would like to express our sincere gratitude and appreciation to Almighty God for granting us the strength, patience, and determination required to successfully complete this project. The journey of developing this Virtual Fitting Room system was both challenging and rewarding, and without perseverance and continuous effort, achieving the project objectives would not have been possible.
+We would like to extend our deepest appreciation to our supervisor, Dr. Ahmed Hamza, for his continuous guidance, valuable suggestions, constructive feedback, and academic support throughout all stages of the project. His expertise and encouragement played a significant role in helping us overcome technical challenges and improve the overall quality of our work. His insightful comments and professional advice greatly contributed to the successful completion of this project.
+We would also like to express our sincere thanks to Eng. Bassant Hassan for her continuous assistance, technical recommendations, and valuable observations during the implementation and evaluation phases of the project. Her support and willingness to provide guidance whenever needed were greatly appreciated by the entire team.
+Special thanks are extended to the Faculty of Computers and Information Technology at the Egyptian E-Learning University for providing a supportive academic environment that encouraged innovation, learning, and research. The knowledge and skills acquired throughout our academic journey have served as the foundation upon which this project was built.
+Furthermore, we would like to acknowledge the efforts of all team members whose dedication, cooperation, and commitment contributed significantly to the success of this work. Developing a Virtual Fitting Room system required extensive research, experimentation, testing, and problem-solving, and the collaborative spirit among team members was essential in achieving the project's objectives.
+Finally, we would like to thank our families and friends for their continuous encouragement, patience, and emotional support throughout the project development period. Their motivation and confidence in our abilities helped us remain focused and determined despite the challenges encountered along the way
+Chapter 1
+Introduction
+1.1 Introduction
+The rapid growth of e-commerce has significantly changed the fashion industry, making online shopping more accessible and convenient for customers. Despite these advantages, one of the main challenges of online clothing shopping is the inability to physically try on garments before purchase. This limitation often creates uncertainty regarding garment appearance and fitting, leading to customer dissatisfaction and increased product return rates.
+To address this challenge, Virtual Fitting Room technologies have been introduced to provide users with a visual representation of how garments may appear when worn. Recent advances in computer vision and deep learning have enabled the development of intelligent systems capable of generating realistic virtual try-on results from ordinary images.
+This project presents a Virtual Fitting Room system that allows users to upload a personal image along with a garment image and generate a realistic virtual try-on result. The proposed solution aims to enhance the online shopping experience by improving customer confidence and providing a more interactive way to evaluate clothing products before purchase.
+1.2 Background and Motivation for the Project
+Online fashion shopping has become increasingly popular due to its convenience and accessibility. However, customers often face difficulties when selecting clothing items because they cannot directly see how garments will look on their bodies. This challenge frequently leads to uncertainty during purchasing decisions and contributes to a high rate of product returns.
+Virtual Fitting Room systems have emerged as a promising solution to this problem. By utilizing artificial intelligence and image processing technologies, these systems enable customers to visualize garments on their own images before making a purchase. Such technologies can improve customer satisfaction, reduce return rates, and enhance the overall shopping experience.
+The motivation behind this project is to develop an intelligent Virtual Fitting Room system capable of generating realistic virtual try-on images using simple image inputs. The project also demonstrates the practical application of modern deep learning techniques in solving real-world challenges within the fashion e-commerce industry.
+1.3 Importance of the Problem Being Addressed
+The inability to visualize clothing before purchase remains one of the major challenges in online fashion retail. Customers often depend on product images and size charts, which may not accurately reflect how a garment will appear when worn. This limitation can lead to incorrect purchasing decisions and reduced customer confidence.
+In addition, high product return rates represent a significant challenge for online retailers. Returns increase operational costs and negatively affect customer satisfaction. Therefore, developing a solution that helps customers better understand how garments may look before purchasing is becoming increasingly important.
+Virtual Fitting Room systems can address these issues by providing a realistic preview of garments on users. Such systems improve the shopping experience, support informed purchasing decisions, and contribute to reducing unnecessary returns.
+1.4 Problem Statement
+Online clothing shoppers often face difficulties when selecting garments because they cannot physically try them on before making a purchase. Existing e-commerce platforms typically provide only product images and sizing information, which are often insufficient for determining how a garment will look on a specific individual.
+As a result, customers may experience uncertainty regarding garment appearance, fitting, and overall suitability. This challenge frequently leads to customer dissatisfaction and increased return rates, creating additional costs for retailers.
+To overcome this problem, there is a need for an intelligent Virtual Fitting Room system capable of generating realistic visualizations of users wearing selected garments. Such a system can help customers make more confident purchasing decisions while improving the overall online shopping experience.
+1.5 Objectives
+Main Objective
+The main objective of this project is to develop a Virtual Fitting Room system capable of generating realistic virtual try-on results using a user image and a garment image.
+Specific Objectives
+Develop a user-friendly system for virtual garment visualization.
+Process user and garment images efficiently before generation.
+Generate realistic virtual try-on images while preserving garment details.
+Maintain user appearance and body structure in the generated results.
+Evaluate the effectiveness of the proposed system using different test cases.
+Establish a foundation for future enhancements such as real-time virtual try-on and mobile deployment.
+1.6 Brief Overview of the Proposed Solution
+The proposed solution is a Virtual Fitting Room system designed to generate realistic virtual try-on results using a user image and a garment image. The system enables users to visualize how a selected clothing item may appear when worn without requiring a physical fitting process.
+The workflow begins by receiving the user image and the target garment image through a simple interface. Both images are then preprocessed to ensure compatibility with the generation pipeline. After preprocessing, the virtual try-on engine analyzes the visual characteristics of both inputs and generates a new image that combines the user's appearance with the selected garment.
+The system is designed to preserve important visual details such as garment texture, color, and shape while maintaining the user's identity and body structure. The generated output aims to provide a realistic representation that can assist users in evaluating clothing items before making purchasing decisions.
+To improve accessibility and usability, the solution is deployed through a web-based architecture that allows users to interact with the system easily. The generated results are delivered automatically, providing a practical and user-friendly virtual fitting experience. The proposed system serves as a step toward more advanced fashion technology applications and demonstrates the potential of artificial intelligence in enhancing online shopping platforms.
+Chapter 2
+Literature Review / Related Work
+Summary of Existing Research and Technologies
+Virtual fitting room technology has become one of the most active research areas in the intersection of computer vision, deep learning, and fashion technology. The primary objective of virtual try-on systems is to generate realistic images of users wearing selected garments without requiring physical fitting. This capability has gained significant attention due to its potential to improve customer experience and reduce product return rates in e-commerce platforms.
+Early virtual try-on approaches relied on traditional image processing and geometric transformations to overlay garments onto user images. Although these methods provided basic visualization capabilities, they often failed to preserve garment details and produced unrealistic results under different poses and body shapes.
+Recent advances in deep learning have significantly improved virtual fitting technologies. Several research efforts have introduced image-based virtual try-on frameworks capable of understanding both human appearance and garment characteristics. Among the most influential works in this field is VITON, which introduced a learning-based approach for transferring garments from one image to another while maintaining visual consistency. Building upon this work, VITON-HD improved image resolution and garment preservation, while HR-VITON further enhanced garment alignment and visual realism.
+More recently, diffusion-based image generation techniques have demonstrated remarkable performance in image synthesis tasks. These approaches are capable of generating highly realistic images while preserving important visual attributes such as garment texture, color, shape, and user identity. As a result, diffusion-based virtual try-on systems have become a promising direction for developing more accurate and visually convincing virtual fitting solutions.
+In addition to academic research, several commercial applications have adopted virtual fitting technologies. Platforms such as Zeekit and Amazon provide customers with virtual garment visualization features that enhance the online shopping experience. Other platforms focus on size recommendation and fit prediction to support purchasing decisions.
+Gaps in Current Solutions
+Despite the significant progress achieved in virtual try-on research, several challenges remain. Many existing solutions struggle to preserve fine garment details when transferring clothing onto different body shapes and poses. Some approaches generate visual artifacts around garment boundaries or fail to maintain realistic body proportions in the generated results.
+In addition, certain virtual fitting systems require extensive computational resources, making deployment difficult in real-world applications. Other solutions depend on complex preprocessing pipelines or are limited to specific garment categories. These limitations reduce the flexibility and scalability of current systems.
+Another challenge involves maintaining a balance between garment preservation and user appearance preservation. While some approaches successfully transfer garment characteristics, they may unintentionally alter facial features, body structure, or image quality, reducing the realism of the generated output.
+Summary and Contribution of This Project
+This project contributes to the field of virtual fitting technology by developing a Virtual Fitting Room system capable of generating realistic virtual try-on images using a user image and a garment image as inputs. The proposed solution focuses on producing visually convincing results while preserving garment appearance, user identity, and overall image consistency.
+The system follows an image-based virtual try-on approach that allows users to visualize garments before making purchasing decisions. By leveraging modern deep learning and image synthesis techniques, the proposed solution aims to improve the online shopping experience and provide a practical demonstration of intelligent fashion technology applications.
+Furthermore, the project establishes a scalable foundation that can be extended in future work to support real-time virtual try-on, mobile deployment, augmented reality integration, and additional fashion-related services. This contribution highlights the potential of artificial intelligence in addressing real-world challenges within the fashion e-commerce industry.
+Chapter 3
+Proposed system
+3.1 Approach Used to Solve the Problem
+The proposed system adopts an image-based virtual try-on approach to address the limitations of online clothing shopping. The system aims to provide users with a realistic visualization of how a selected garment may appear when worn before making a purchasing decision.
+Unlike traditional online shopping platforms that rely solely on product images and size charts, the proposed solution enables users to upload their own image along with an image of a desired garment. The system then generates a realistic virtual try-on result that combines the visual characteristics of the garment with the appearance of the user.
+The proposed approach focuses on maintaining garment details, preserving user identity, and producing visually consistent results. By utilizing advanced image synthesis techniques, the system can generate realistic outputs while minimizing distortions and preserving important visual features.
+The overall objective of the system is to improve customer confidence, enhance the online shopping experience, and reduce uncertainty during the purchasing process.
+3.2 System Architecture
+The architecture of the proposed system consists of several interconnected modules that work together to generate virtual try-on results. Each module performs a specific task within the overall processing pipeline.
+System Workflow
+Input Stage
+The system receives two input images:
+User Image
+Garment Image
+The user image represents the person who wishes to virtually try on the garment, while the garment image represents the selected clothing item.
+Preprocessing Stage
+Before the generation process begins, both images undergo preprocessing operations. This stage ensures that image dimensions, formats, and visual properties are suitable for further processing. Image validation is also performed to improve overall system reliability.
+Virtual Try-On Generation Stage
+During this stage, the system analyzes the visual information contained in both images and generates a new image representing the user wearing the selected garment. The generation process aims to preserve important garment details such as color, texture, and shape while maintaining the user's appearance and body structure.
+Output Stage
+The final generated image is presented to the user through the system interface. This output provides a realistic visualization of the selected garment and can assist users in evaluating clothing items before purchasing them.
+The complete workflow can be summarized as follows:
+User Image + Garment Image
+↓
+Image Preprocessing
+↓
+Virtual Try-On Engine
+↓
+Image Generation
+↓
+Final Output Image
+3.3 Algorithms and Frameworks Used
+The proposed system relies on modern artificial intelligence and computer vision technologies to generate realistic virtual try-on results.
+Deep Learning Techniques
+The system utilizes advanced deep learning methods for image understanding and image synthesis. These techniques enable the model to analyze user appearance and garment characteristics while generating realistic visual outputs.
+Image Synthesis Techniques
+Image synthesis plays a critical role in generating the final virtual try-on image. The generation process focuses on preserving garment appearance, maintaining visual consistency, and ensuring realistic integration between the user and the selected garment.
+Frameworks and Tools
+The implementation of the proposed system was carried out using several software frameworks and development tools, including:
+Python
+PyTorch
+OpenCV
+FastAPI
+Gradio
+NumPy
+PIL
+These tools provide the necessary functionality for image processing, model execution, API development, and user interaction.
+The combination of these technologies enables the system to generate realistic virtual try-on results efficiently while maintaining scalability and ease of deployment.
+Chapter 4
+Implementation
+4.1 Technologies, Tools, and Programming Languages Used
+The implementation of the proposed Virtual Fitting Room system was carried out using a combination of modern programming languages, frameworks, and development tools. Python was selected as the primary programming language due to its extensive support for artificial intelligence, machine learning, and image processing applications.
+PyTorch was used to support deep learning operations and image generation tasks. OpenCV and PIL were utilized for image loading, preprocessing, resizing, and format conversion. NumPy was employed for numerical computations and image data manipulation.
+FastAPI was used to develop the backend API responsible for receiving user requests, processing uploaded images, and returning the generated virtual try-on results. Gradio was utilized during development and testing to provide an interactive interface for evaluating system performance and generated outputs.
+The development and execution environment was based on Google Colab, which provided access to GPU resources required for image generation tasks. Ngrok was used to expose the backend application through a public URL for testing and integration purposes.
+The main technologies used in this project include Python, PyTorch, OpenCV, PIL, NumPy, FastAPI, Gradio, Google Colab, and Ngrok.
+4.2 Key Components and Modules of the System
+The proposed system consists of several interconnected modules that work together to generate realistic virtual try-on results.
+The Input Module is responsible for receiving the user image and garment image through the system interface. These images are then passed to the Image Preprocessing Module, where validation, resizing, and preparation operations are performed before processing.
+The core component of the system is the Virtual Try-On Engine, which analyzes both input images and generates a new image representing the user wearing the selected garment. This component focuses on preserving garment details while maintaining user appearance and body structure.
+The Backend API Module manages communication between the user interface and the processing engine. It receives image uploads, executes the generation pipeline, and returns the final output image. Finally, the Output Module displays the generated result and allows the user to view or download the generated image.
+This modular architecture improves maintainability, scalability, and future system development.
+4.3 Challenges Faced and How They Were Resolved
+Several challenges were encountered during the implementation phase of the project. One of the main challenges was the computational resources required for image generation. Since image synthesis tasks require significant processing power, GPU resources available through Google Colab were utilized to improve performance and reduce processing time.
+Another challenge involved software dependency management and library compatibility. Different packages required specific versions to function correctly together. This issue was resolved by carefully selecting and testing compatible library versions before system deployment.
+Image quality and input consistency also affected the generated results. Variations in image resolution, lighting conditions, and garment appearance sometimes influenced output quality. To address this issue, preprocessing operations were applied to standardize inputs before generation.
+The integration between the backend application and the image generation pipeline presented another challenge. FastAPI was used to create a structured API that efficiently handled image uploads and result delivery. Additionally, Ngrok was used to expose the application through a public URL, enabling external access and testing.
+Despite these challenges, the final system was successfully implemented and was able to generate realistic virtual try-on images while maintaining satisfactory visual quality and overall system stability.
+Chapter 5
+Testing & Evaluation
+5.1 Testing Strategies
+To evaluate the functionality and reliability of the proposed Virtual Fitting Room system, several testing strategies were applied throughout the development process. The objective of testing was to verify that the system could successfully receive input images, process them correctly, and generate realistic virtual try-on results.
+Functional testing was performed to ensure that each component of the system operated as expected. Different user images and garment images were uploaded to verify that the system could correctly process inputs and generate output images without errors.
+Integration testing was also conducted to validate communication between the system modules. The interaction between the user interface, backend API, and virtual try-on engine was tested to ensure smooth data flow and successful result generation.
+In addition, multiple test cases were performed using different clothing categories, image resolutions, and user poses. This helped evaluate the system's ability to generate consistent results under different input conditions.
+5.2 Performance Metrics
+The performance of the proposed system was evaluated using several qualitative measures related to image quality and system functionality.
+Image Quality
+The generated images were visually inspected to evaluate the realism of the virtual try-on results. Particular attention was given to garment appearance, color preservation, texture consistency, and overall image quality.
+User Appearance Preservation
+The system was evaluated based on its ability to maintain the user's identity and body structure after the virtual try-on process. The generated results demonstrated good preservation of facial features and body proportions.
+Garment Preservation
+Another important evaluation criterion was the preservation of garment characteristics. The generated images successfully maintained garment color, design, and visual appearance in most test cases.
+System Functionality
+The system successfully accepted user inputs, processed uploaded images, generated virtual try-on results, and returned the final output image through the web interface. These operations were completed reliably throughout the testing phase.
+5.3 Comparison with Existing Solutions
+Compared with traditional image overlay techniques, the proposed system generates more realistic and visually consistent virtual try-on results. Earlier approaches often produced unrealistic garment placement and poor alignment between clothing items and the user's body.
+Modern virtual try-on systems have improved image quality significantly; however, some solutions still struggle with preserving garment details or maintaining user appearance. The proposed system focuses on balancing both aspects by generating realistic outputs while preserving important visual characteristics of both the garment and the user.
+In addition, the system operates using only a user image and a garment image, making it easier to use compared to approaches that require additional inputs or specialized equipment. This improves accessibility and demonstrates the practical applicability of the proposed solution for online fashion platforms.
+Chapter 6
+Results & Discussion
+6.1 Introduction
+This chapter presents the results obtained from implementing and evaluating the proposed Virtual Fitting Room system. The primary objective of the evaluation process was to assess the system's ability to generate realistic virtual try-on images using a user image and a garment image as inputs. The generated outputs were analyzed to determine how effectively the system preserves garment characteristics, maintains user appearance, and produces visually convincing results.
+Several test cases were conducted using different user images, garment styles, and image conditions. The evaluation focused on image quality, garment alignment, visual consistency, and overall realism. The obtained results provide valuable insights into the strengths and limitations of the proposed solution and demonstrate its effectiveness as a virtual fitting application.
+6.2 Summary of Findings
+The experimental results demonstrated that the system was capable of generating realistic virtual try-on images across a variety of scenarios. In most cases, the generated outputs successfully transferred the selected garment onto the user while preserving important visual characteristics such as garment color, texture, and overall design.
+The generated images maintained a high degree of consistency between the user's appearance and the selected garment. Facial features, body proportions, and general visual identity were preserved in most test cases, contributing to a more realistic and convincing virtual fitting experience.
+The system also showed the ability to handle different clothing categories and user images with varying poses and body structures. The generated outputs exhibited proper garment placement and acceptable alignment between the clothing item and the user. Overall, the results indicate that the proposed system successfully achieved its objective of providing realistic garment visualization for online shopping applications.
+6.3 Interpretation of Results
+The obtained results highlight the effectiveness of modern image synthesis techniques in virtual try-on applications. The system demonstrated the ability to combine information from both user and garment images while maintaining visual coherence in the generated output.
+One of the most important observations during testing was the system's ability to preserve garment appearance while simultaneously maintaining user identity. This balance is critical in virtual fitting applications because customers need to see both the garment details and their own appearance represented accurately in the generated image.
+The evaluation also showed that input image quality plays an important role in the final output quality. High-resolution images with clear lighting conditions generally produced better results than low-quality images. Similarly, garment images with clear boundaries and visible details contributed to more accurate and visually appealing outputs.
+Another important observation was the successful integration of all system components. The workflow involving image upload, preprocessing, virtual try-on generation, and result delivery operated successfully throughout the testing process. This demonstrates the practicality of the proposed system and confirms its suitability for real-world applications.
+6.4 Limitations of the Proposed Solution
+Although the generated results were generally satisfactory, several limitations were identified during the evaluation process. The quality of the generated output remains dependent on the quality of the input images. Images with poor lighting, low resolution, or significant occlusions may negatively affect the realism of the final result.
+In addition, certain complex garment designs and unusual body poses may introduce minor distortions or alignment inaccuracies. While these issues did not significantly impact most test cases, they highlight areas where further improvements can be made.
+The system also requires considerable computational resources during image generation. Compared to traditional image processing techniques, virtual try-on generation involves more complex computations, which may increase processing time and limit real-time performance in some environments.
+Despite these limitations, the overall results demonstrate that the proposed Virtual Fitting Room system is capable of generating realistic and visually convincing virtual try-on images. The system successfully fulfills its intended objectives and provides a strong foundation for future enhancements and advanced virtual fitting applications.
+6.5 Overall Discussion
+The results obtained throughout this project demonstrate the growing potential of artificial intelligence and computer vision technologies within the fashion industry. The proposed Virtual Fitting Room system provides an effective solution for visualizing garments before purchase, helping customers make more informed decisions and enhancing the overall online shopping experience.
+By generating realistic virtual try-on images, the system addresses one of the major challenges associated with online clothing shopping, namely the inability to physically try on garments before purchase. The generated outputs indicate that intelligent image synthesis technologies can significantly improve customer confidence and reduce uncertainty during the purchasing process.
+Overall, the project demonstrates the feasibility of implementing a practical Virtual Fitting Room solution and highlights the potential of modern deep learning techniques in transforming digital fashion and e-commerce applications.
+Chapter 7
+Conclusion & Future Work
+7.1 Summary of Contributions
+This project focused on developing the core foundations of a Virtual Fitting Room system using computer vision and deep learning techniques. The main contribution of this work is the successful implementation and evaluation of four essential modules: human segmentation, body segmentation, human parsing, and pose estimation, all operating on a single RGB image.
+The implemented pipeline demonstrated the ability to accurately analyze human body structure and posture by producing reliable segmentation masks, semantic body-part maps, and pose keypoints. These results validate the effectiveness of the proposed approach and confirm that the project objectives for the first semester were successfully achieved. Additionally, the modular system design contributes to scalability, maintainability, and ease of future extension.
+7.2 Possible Improvements or Extensions for Future Work
+Future work can extend this project by integrating virtual garment fitting and rendering modules to complete the Virtual Fitting Room pipeline. Incorporating pose-guided garment warping techniques and advanced try-on models would improve visual realism.
+Further enhancements include supporting real-time processing, improving robustness under challenging conditions such as occlusions and complex backgrounds, and extending the system to handle multi-person scenarios. Additionally, integrating 3D body modeling and physics-based cloth simulation could significantly enhance garment behavior realism. Expanding datasets and applying quantitative evaluation metrics would also strengthen system performance and generalization.
+Chapter 8
+Security Considerations & Threat Analysis
+Scenario A: The "Sponge" DDoS Attack (AI-Specific)
+Standard DDoS attacks flood the network.
+A "Sponge" attack sends data designed to maximize this processing time, causing the server to hang with fewer requests than a network flood.
+The Attack Logic:
+Legitimate users upload standard resolution images (e.g., 1080p).
+The Malicious Actor: Sends an image with massive dimensions (e.g., 10,000 x 10,000 pixels)
+OR
+a corrupted file structure that forces the CV (Computer Vision) library to loop endlessly or consume all RAM.
+How to Simulate (Python Script): You don't need a botnet. You can write a Python script using threading to send 50-100 heavy requests simultaneously to your model's API endpoint.
+Mitigation: Implement input validation (max image dimensions) before the image reaches the AI model.
+Paper documentation
+IEEE organization: Institute of Electrical and Electronics Engineers
+: the document
+Cornell University:  the document
+2. Scenario B: Brute Force (API Endpoint Fuzzing)
+Since this is a fitting room
+you likely have an API that takes parameters (e.g., user_id, clothing_id, model_type).
+The Attack Logic:
+The attacker iterates through ( clothing_id=0001 to clothing_id=9999)
+2   scrape your entire inventory database, or user_id to see other people's generated photos (a massive privacy breach).
+How to Simulate: Use a tool like Burp Suite (Intruder) or a simple Python loop to rapid-fire GET requests with incrementing IDs.
+Mitigation:
+1 - Rate Limiting (Nginx)     2 - WAF rules
+Paper documentation:
+1 -   USENIX organization:   the document
+3. Scenario C: Model Theft / Extraction: The "Copycat" : Controlled Instruction-Level Attacks on Enclaves
+- Concept:
+1 - Attacker wants to steal your "Virtual Fitting Room" technology without paying for it.
+2 - They query your API thousands of times with different images and use the input-output pairs to train their own "Shadow Model" that mimics yours exactly.
+Vulnerability: Unrestricted API access (Lack of Rate Limiting).
+How to Simulation:
+1 - Attacker writes a script to query your Gradio API 10,000 times a day.
+2 - saving the inputs and the resulting segmented outputs. They use this dataset to train (My Stolen Model)
+Mitigation: Implement Rate Limiting in the Gradio launch options or at the network level (Firewall/Nginx)
+Paper documentation:
+1 -   USENIX organization:   the document
+References
+Gong, K., Liang, X., Zhang, D., Shen, X., & Lin, L. (2018). Look into person: Self-supervised structure-sensitive learning and a new benchmark for human parsing. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 6757–6765.🔗https://arxiv.org/abs/1803.09127
+Zhang, S. H., Dong, J., Liu, Y., Zhou, J., & Zhang, X. (2019). Pose2Seg: Detection free human instance segmentation. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 889–898.🔗 https://arxiv.org/abs/1903.00459
+Kvnanchiani, K., et al. (2023). EasyPortrait: A high-quality portrait segmentation dataset and benchmark. IEEE International Conference on Computer Vision Workshops (ICCVW).🔗 https://arxiv.org/abs/2304.00444
+Berkay, A., et al. (2023). FashionSegNet: A deep learning approach for semantic segmentation of fashion images. Pattern Recognition Letters, 169, 1–9.🔗 https://www.sciencedirect.com/science/article/pii/S0167865523001807
+Hu, Y. (2008). Foreground extraction for clothing images using constrained Delaunay triangulation. IEEE Transactions on Image Processing, 17(12), 2476–2485.🔗 https://ieeexplore.ieee.org/document/4665368
+Liu, Z., Luo, P., Qiu, S., Wang, X., & Tang, X. (2016). DeepFashion: Powering robust clothes recognition and retrieval with rich annotations. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 1096–1104.🔗 https://arxiv.org/abs/1606.03340
+Ge, Y., Zhang, R., Wang, X., Tang, X., & Luo, P. (2019). DeepFashion2: A versatile benchmark for detection, pose estimation, segmentation, and re-identification of clothing images. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 5337–5345.🔗 https://arxiv.org/abs/1901.07973
+Han, X., Wu, Z., Wu, Z., Yu, R., & Davis, L. S. (2018). VITON: An image-based virtual try-on network. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 7543–7552.🔗 https://arxiv.org/abs/1711.08447
+Jiang, W., et al. (2022). VITON-HD: High-resolution virtual try-on. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 13098–13107.🔗 https://arxiv.org/abs/2103.16874
+Bhatnagar, B. L., et al. (2020). CLOTH3D: Clothed 3D humans. European Conference on Computer Vision (ECCV), 344–359.🔗 https://arxiv.org/abs/2008.06964

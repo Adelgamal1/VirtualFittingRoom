@@ -144,19 +144,29 @@ namespace VirtualFittingRoom.Services
         private bool ShouldUsePreviewFallback(string? error, string? apiUrlOverride)
         {
             var mode = (_options.Mode ?? string.Empty).Trim();
-            if (string.Equals(mode, "HuggingFace", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(mode, "HuggingFaceSpace", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
             if (string.Equals(mode, "Preview", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(mode, "Fallback", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
 
-            return IsRecoverableAiEndpointError(error) || IsExpiredCloudflareUrl(apiUrlOverride);
+            if (string.Equals(mode, "Api", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (IsRecoverableAiEndpointError(error) || IsExpiredCloudflareUrl(apiUrlOverride))
+            {
+                return true;
+            }
+
+            if (string.Equals(mode, "HuggingFace", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(mode, "HuggingFaceSpace", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return false;
         }
 
         private static bool IsRecoverableAiEndpointError(string? error)
@@ -170,6 +180,11 @@ namespace VirtualFittingRoom.Services
                 error.Contains("Cloudflare tunnel", StringComparison.OrdinalIgnoreCase) ||
                 error.Contains("No such host is known", StringComparison.OrdinalIgnoreCase) ||
                 error.Contains("trycloudflare.com", StringComparison.OrdinalIgnoreCase) ||
+                error.Contains("copying content to a stream", StringComparison.OrdinalIgnoreCase) ||
+                error.Contains("response ended prematurely", StringComparison.OrdinalIgnoreCase) ||
+                error.Contains("closed the connection", StringComparison.OrdinalIgnoreCase) ||
+                error.Contains("forcibly closed", StringComparison.OrdinalIgnoreCase) ||
+                error.Contains("connection reset", StringComparison.OrdinalIgnoreCase) ||
                 error.Contains("Hugging Face Space URL is not configured", StringComparison.OrdinalIgnoreCase) ||
                 error.Contains("old public demo", StringComparison.OrdinalIgnoreCase);
         }
@@ -241,11 +256,11 @@ namespace VirtualFittingRoom.Services
                 var widthFactor = category switch
                 {
                     "tank-top" => 1.18,
-                    "jersey" => 1.96,
+                    "jersey" => 2.18,
                     "chemise" => 1.48,
                     "blouse" => 1.42,
                     "shirt" => 1.42,
-                    "t-shirt" => 1.70,
+                    "t-shirt" => 1.54,
                     "hoodie" or "jacket" => 1.58,
                     _ => 1.50
                 };
@@ -253,8 +268,8 @@ namespace VirtualFittingRoom.Services
                 var torsoHeight = Math.Max(1, body.HipY - body.NeckY);
                 var height = category switch
                 {
-                    "jersey" => Math.Max(1, (int)Math.Round(torsoHeight * 1.28)),
-                    "t-shirt" => Math.Max(1, (int)Math.Round(torsoHeight * 0.99)),
+                    "jersey" => Math.Max(1, (int)Math.Round(torsoHeight * 1.40)),
+                    "t-shirt" => Math.Max(1, (int)Math.Round(torsoHeight * 1.06)),
                     _ => Math.Max(1, (int)Math.Round(reference.Height * placement.Height))
                 };
                 var collarRatio = category switch
@@ -267,7 +282,7 @@ namespace VirtualFittingRoom.Services
                 };
                 var topLift = category switch
                 {
-                    "t-shirt" => shoulderWidth * 0.16,
+                    "t-shirt" => shoulderWidth * 0.08,
                     "jersey" => shoulderWidth * 0.08,
                     _ => shoulderWidth * 0.06
                 };
@@ -339,7 +354,7 @@ namespace VirtualFittingRoom.Services
 
             return category switch
             {
-                "jersey" => new GarmentPlacement("upper", 0.07, 0.18, 0.86, 0.58, 1.00, 0.00),
+                    "jersey" => new GarmentPlacement("upper", 0.02, 0.15, 0.96, 0.64, 1.00, 0.00),
                 "hoodie" => new GarmentPlacement("upper", 0.08, 0.20, 0.84, 0.46, 1.00, 0.00),
                 "jacket" => new GarmentPlacement("upper", 0.08, 0.20, 0.84, 0.46, 1.00, 0.00),
                 "tank-top" => new GarmentPlacement("upper", 0.15, 0.20, 0.70, 0.46, 1.00, 0.00),
@@ -461,7 +476,52 @@ namespace VirtualFittingRoom.Services
                 return;
             }
 
+            if (category == "jersey")
+            {
+                DrawTransparentUpperGarment(graphics, person, garment, drawTarget, body);
+                return;
+            }
+
             DrawUpperGarmentPreview(graphics, person, garment, drawTarget, body, category);
+        }
+
+        private static void DrawTransparentUpperGarment(
+            Graphics graphics,
+            Bitmap person,
+            Bitmap garment,
+            Rectangle drawTarget,
+            BodyFitLandmarks body)
+        {
+            using var garmentLayer = new Bitmap(person.Width, person.Height, PixelFormat.Format32bppArgb);
+            using (var layerGraphics = Graphics.FromImage(garmentLayer))
+            {
+                layerGraphics.CompositingQuality = CompositingQuality.HighQuality;
+                layerGraphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                layerGraphics.SmoothingMode = SmoothingMode.HighQuality;
+                layerGraphics.Clear(Color.Transparent);
+                layerGraphics.DrawImage(garment, drawTarget);
+            }
+
+            var shoulderWidth = Math.Max(1, body.ShoulderRight - body.ShoulderLeft);
+            var guardTop = Math.Max(0, body.NeckY - (int)Math.Round(shoulderWidth * 0.95));
+            var guardBottom = Math.Min(person.Height, body.CollarY + (int)Math.Round(shoulderWidth * 0.18));
+            using (var guardGraphics = Graphics.FromImage(garmentLayer))
+            {
+                guardGraphics.CompositingMode = CompositingMode.SourceCopy;
+                using var clearBrush = new SolidBrush(Color.Transparent);
+                guardGraphics.FillRectangle(clearBrush, 0, 0, person.Width, Math.Max(0, guardTop));
+
+                var neckWidth = Math.Max(24, (int)Math.Round(shoulderWidth * 0.34));
+                var neckHeight = Math.Max(14, (int)Math.Round(shoulderWidth * 0.18));
+                guardGraphics.FillEllipse(
+                    clearBrush,
+                    body.CenterX - (neckWidth / 2),
+                    Math.Max(0, body.CollarY - (neckHeight / 2)),
+                    neckWidth,
+                    neckHeight);
+            }
+
+            graphics.DrawImage(garmentLayer, 0, 0);
         }
 
         private static void DrawUpperGarmentPreview(
@@ -476,7 +536,7 @@ namespace VirtualFittingRoom.Services
             var centerX = body.CenterX;
             var upperLift = category switch
             {
-                "t-shirt" => shoulderWidth * 0.16,
+                "t-shirt" => shoulderWidth * 0.08,
                 "jersey" => shoulderWidth * 0.08,
                 _ => shoulderWidth * 0.06
             };
@@ -493,6 +553,7 @@ namespace VirtualFittingRoom.Services
                 "tank-top" => 0.08,
                 "jersey" => 0.26,
                 "hoodie" or "jacket" => 0.22,
+                "t-shirt" => 0.24,
                 _ => 0.20
             };
             var sleeveReach = category switch
@@ -500,10 +561,11 @@ namespace VirtualFittingRoom.Services
                 "tank-top" => 0.12,
                 "jersey" => 0.56,
                 "hoodie" or "jacket" => 0.48,
+                "t-shirt" => 0.36,
                 _ => 0.46
             };
-            var bottomHalf = Math.Max(shoulderWidth * (category == "t-shirt" ? 0.49 : 0.58), drawTarget.Width * 0.31);
-            var shoulderInset = shoulderWidth * (category == "t-shirt" ? 0.06f : 0.12f);
+            var bottomHalf = Math.Max(shoulderWidth * (category == "t-shirt" ? 0.45 : 0.58), drawTarget.Width * 0.31);
+            var shoulderInset = shoulderWidth * (category == "t-shirt" ? 0.03f : 0.12f);
             var leftOuter = Math.Max(drawTarget.Left, (float)body.ShoulderLeft - (shoulderWidth * (float)sleeveReach));
             var rightOuter = Math.Min(drawTarget.Right, (float)body.ShoulderRight + (shoulderWidth * (float)sleeveReach));
             var outerY = shoulderY + (shoulderWidth * (float)sleeveDrop);
@@ -575,8 +637,8 @@ namespace VirtualFittingRoom.Services
                 collarY + (int)Math.Round(shoulderWidth * (category == "t-shirt" ? 0.055 : 0.035)),
                 0,
                 person.Height - 1);
-            var neckWidth = Math.Max(22, shoulderWidth * (category == "tank-top" ? 0.28f : 0.23f));
-            var neckHeight = Math.Max(11, shoulderWidth * (category == "tank-top" ? 0.12f : 0.105f));
+            var neckWidth = Math.Max(22, shoulderWidth * (category == "tank-top" ? 0.28f : category == "t-shirt" ? 0.26f : 0.23f));
+            var neckHeight = Math.Max(11, shoulderWidth * (category == "tank-top" ? 0.12f : category == "t-shirt" ? 0.095f : 0.105f));
             var neckRect = new RectangleF(
                 centerX - (neckWidth / 2f),
                 neckCenterY - (neckHeight * 0.50f),

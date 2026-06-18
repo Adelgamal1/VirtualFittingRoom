@@ -54,7 +54,7 @@ def build_fallback_mask(image: Image.Image, category: str) -> Image.Image:
     elif category == "overall":
         box = (int(width * 0.14), int(height * 0.05), int(width * 0.86), int(height * 0.98))
     else:
-        box = (int(width * 0.14), int(height * 0.07), int(width * 0.86), int(height * 0.62))
+        box = (int(width * 0.18), int(height * 0.32), int(width * 0.82), int(height * 0.78))
 
     draw.rounded_rectangle(box, radius=max(16, width // 14), fill=255)
     return mask

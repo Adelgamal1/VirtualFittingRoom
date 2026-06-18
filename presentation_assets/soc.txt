@@ -1,0 +1,188 @@
+Virtual Fitting Rooms: Cybersecurity & SOC Defense Assessment
+- Cybersecurity Engineer: Akram Mohmmed Sami
+- Role: Level 4 Cybersecurity & Tier 1 SOC Analyst
+
+-------------------------------------------------------------------------------------------------------------
+
+
+1. Executive Summary
+The Virtual Fitting Rooms platform uses the CatVTON AI for dynamic cloth segmentation. To keep this platform secure and fully operational, we integrated a complete Security Operations Center (SOC) lifecycle into the backend.
+1 - Our Defensive Architecture We established a strong security foundation focusing on three key areas:
+Perimeter Hardening: Securing the Microsoft Azure cloud edge against unauthorized access.
+Vulnerability Analysis: Auditing the application's source code to find and fix weaknesses.
+Active Monitoring: Deploying Wazuh XDR to continuously monitor the system.
+2- Threat Validation & Results To prove our defenses work, we stress-tested the system with a strict sequence of simulated cyberattacks:
+Volumetric SYN Floods (Resource Exhaustion)
+Credential Stuffing (SSH Brute-Force)
+Network Reconnaissance (Port Scanning)
+3 - The Outcome:  Our monitoring system successfully detected these attacks, correlated the abnormal behaviour, and triggered high-fidelity alerts in real-time.
+=================================================================
+
+
+
+
+2. Cybersecurity Architecture Blueprint
+This blueprint maps the flow of adversarial traffic from the external threat landscape, through the perimeter controls, down to the application layer, and finally to the SOC detection logic.
+
+👇
+[ 🌐 TIER 1: THREAT LANDSCAPE]
+│ (Attacker initiates traffic from Kali Linux)
+├── 🔴 hping3 (SYN Flood / Resource Exhaustion)
+├── 🔴 Hydra (SSH Brute-Force via rockyou.txt)
+└── 🔴 Nmap (Reconnaissance Scan)
+│
+▼ (Packet hits the edge)
+[ 🛡️ TIER 2: SECURITY EDGE (Perimeter Defense) ]
+│ (Azure Access Restrictions - ACTIVE)
+├── 🛑 Rule: BlockKali (Priority 100, Action: Deny)
+└── ✅ Unmatched: Allow Legitimate Traffic
+│
+▼ (Authorized traffic only)
+[ ☁️ TIER 3: CLOUD INFRASTRUCTURE]
+│ (Azure Virtual Machine)
+└── 💻 VFR-Backend-VM (Ubuntu 22.04 LTS)
+│
+▼ (Application logic processing)
+[ 🐍 TIER 4: APPLICATION BACKEND / AI ENGINE]
+│ (Gradio Web Interface / app.py)
+├── ⚠️ VULNERABILITY: `share=True` (Unauthenticated Public Proxy Tunnel)
+└── 🛠️ REMEDIATION: Enforce `share=False` to close proxy exposure
+│
+▼ (Host Telemetry exported via Agent)
+[ 🛡️ TIER 5: SIEM SOLUTION (The SOC)]
+│ (Wazuh Cloud XDR)
+├── 👁️ [ ANALYZE] Ingesting Syslog, Auth logs, and Agent Telemetry
+└── 🚨 [ TRIGGER] Real-time Detections:
+├── CRITICAL: Potential SYN Flood (Alert ID: 100005)
+├── SSH Authentication Failed/Brute Force (Alert ID: 5710)
+└── Nmap Scan Detected
+
+==================================================================
+
+
+3. Infrastructure & Server Setup
+------------------------------------------------------
+1 - Title: Cloud Infrastructure Provisioning
+
+
+
+
+👇 
+
+Deployment of the dedicated Ubuntu 22.04 LTS backend virtual machine within Microsoft Azure, establishing the foundational compute environment for the AI application and security sensors.
+2 - Title: Azure Perimeter Hardening
+👇
+Configuration of strict network-level access control lists (ACLs) at the Azure perimeter. Explicit Deny rules were implemented to filter unauthorized public ingress, establishing a robust default-deny posture.
+
+
+==================================================================
+4. SIEM Solution Setup (Wazuh)
+-------------------------------------------------------------
+
+ 1- Title: SOC Telemetry Initialization (Wazuh SIEM)
+👇
+The provisioning of the centralized Wazuh Cloud XDR environment, serving as the core Security Information and Event Management (SIEM) platform for logging and threat correlation.
+2 - Title: Wazuh XDR Agent Deployment
+👇 
+
+
+Successful installation and authentication of the Wazuh endpoint agent on the backend Azure VM. This transforms the application server into an active security sensor streaming real-time host telemetry
+
+
+
+========================================================================
+5. Threat Simulation, Detection & Mitigation
+----------------------------------------------------------------------
+
+Attack Phase 1: Volumetric DoS (SYN Flood)
+
+ 1 - Title: Attack Execution: Volumetric SYN Flood
+2- Title: Detection Overview: SYN Flood Dashboard Metrics
+👇 
+
+The Wazuh Threat Hunting dashboard visualizing a massive spike in network activity, capturing 1,994 total hits during the attack window and flagging the anomalous traffic velocity.
+3 - Title: Detailed Event Alert: SYN Flood Correlation
+👇 
+
+
+Wazuh successfully correlated the abnormal traffic telemetry into a specific, actionable event, triggering Alert ID 100005 ("CRITICAL: Potential SYN Flood Attack").
+Mitigation: Configure rate-limiting at the Azure perimeter and deploy Wazuh Active Response scripts to automatically block IP addresses exhibiting flood behaviors
+------------------------------------------------------------------------------------------------------------------------------------Attack Phase 2: Credential Stuffing (SSH Brute-Force)
+
+
+1 - Title: Attack Execution: Hydra SSH Brute-Force
+
+
+
+
+👇 
+
+An automated credential stuffing attack executed via the Hydra framework, utilizing the rockyou.txt dictionary to repeatedly attempt unauthorized administrative access against the backend.
+2 - Title: Detection Overview: Brute-Force Dashboard Metrics
+👇 
+
+The SIEM dashboard clearly illustrating the brute-force attempt, highlighting exactly 149 authentication failures clustered within a concentrated timestamp.
+3- Title: Detailed Event Alert: SSH Authentication Failures
+👇
+The detailed Wazuh event log parsing the syslog data. It shows the immediate triggering of Alert ID 5710 ("sshd: Attempt to login using a non-existent user"), accurately tracking the lateral movement attempt.
+
+
+Mitigation: Enforce key-based authentication for SSH (disable password logins), change default SSH ports, and utilize Wazuh Active Response to implement automatic IP banning after three failed login attempts.
+--------------------------------------------------------------------------------------------
+
+
+
+
+
+Attack Phase 3: Network Reconnaissance (Port Scanning)
+
+1 - Title: Attack Execution: Network Reconnaissance Scanning
+
+
+
+
+
+
+
+👇 
+
+
+An aggressive nmap port scan initiated against the backend infrastructure to map the attack surface, footprint available services, and identify potential entry points
+2 - Title: Detection Overview: Reconnaissance Dashboard Metrics
+👇 
+
+The SIEM dashboard capturing the isolated footprinting event, isolating the scanning IP and matching it against the MITRE ATT&CK framework for reconnaissance tactics.
+
+
+
+
+3 - Title: Detailed Event Alert: Nmap Signature Recognition
+
+
+
+👇 
+
+Despite the Azure perimeter actively dropping unauthorized packets, the Wazuh SIEM successfully captured the detailed footprinting signature, generating a specific event log that provides the SOC with complete visibility into the attacker's scanning phase.
+Mitigation: Maintain strict default-deny Network Security Group (NSG) rules in Azure to ensure unauthorized scanning traffic is dropped at the edge before reaching the application host.
+
+================================================================
+6. Critical Application Vulnerability Discovery
+---------------------------------------------------------------------------
+
+Title: Application-Layer Vulnerability & Mitigation
+
+
+
+👇
+Static source code analysis identified a critical misconfiguration in the app.py script. The Gradio share=True parameter inadvertently generates an unauthenticated public proxy tunnel, bypassing all external network firewalls.
+Mitigation: Immediately enforce share=False in the application code and ensure all incoming web traffic is securely routed and authenticated through the Azure perimeter.
+
+==================================================================================
+7. Conclusion & Final Assessment
+- The cybersecurity integration for the Virtual Fitting Rooms platform successfully transformed a functional AI application into a hardened, actively monitored environment. By executing a defense-in-depth strategy, we achieved three critical milestones:
+Secured the Perimeter: Hardened the Azure cloud infrastructure and neutralized a critical application-layer exposure.
+Deployed Active Defense: Integrated the Wazuh XDR platform for complete, real-time host visibility and log correlation.
+Validated Resilience: Successfully detected, tracked, and mitigated aggressive threat simulations—including volumetric DoS, credential brute-forcing, and network reconnaissance.
+Final Verdict: The platform is not only innovative but exceptionally secure. It operates under a robust SOC lifecycle, fully capable of identifying and neutralizing modern cyber threats before they can impact the application or its data
+
+==================================================

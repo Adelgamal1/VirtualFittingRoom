@@ -77,7 +77,7 @@ namespace VirtualFittingRoom.Services
                     ? await RunAgainstReplicateAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken)
                     : IsHuggingFaceMode()
                     ? await RunAgainstHuggingFaceSpaceAsync(personImage, clothingImage, normalizedGarmentArea, clothingType, normalizedGarmentView, poseLandmarksData, cancellationToken)
-                    : await RunAgainstLocalServerAsync(personImage, clothingImage, normalizedGarmentArea, cancellationToken);
+                    : await RunAgainstLocalServerAsync(personImage, clothingImage, normalizedGarmentArea, clothingType, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -211,8 +211,6 @@ namespace VirtualFittingRoom.Services
             var personFile = personUpload.FileData;
             var garmentFile = garmentUpload.FileData;
             var gradioApiPrefix = garmentUpload.ApiPrefix;
-            var shouldSendPose = !string.IsNullOrWhiteSpace(poseLandmarksData);
-
             object BuildRequest(bool includePoseLandmarks)
             {
                 var data = new List<object?>
@@ -241,13 +239,13 @@ namespace VirtualFittingRoom.Services
 
             using var submitResponse = await client.PostAsJsonAsync(
                 $"{baseUrl}{gradioApiPrefix}/call/{apiName}",
-                BuildRequest(shouldSendPose),
+                BuildRequest(true),
                 cancellationToken);
 
             var submitJson = await submitResponse.Content.ReadAsStringAsync(cancellationToken);
             if (!submitResponse.IsSuccessStatusCode)
             {
-                if (shouldSendPose && IsGradioInputCountError(submitJson))
+                if (IsGradioInputCountError(submitJson))
                 {
                     using var retryResponse = await client.PostAsJsonAsync(
                         $"{baseUrl}{gradioApiPrefix}/call/{apiName}",
@@ -417,14 +415,14 @@ namespace VirtualFittingRoom.Services
 
             if (string.IsNullOrWhiteSpace(apiUrl))
             {
-                return (false, null, "Colab API URL is missing. Paste the URL ending with /tryon in the Upload page.");
+                return (false, null, "Kaggle/Colab API URL is missing. Paste the Cloudflare URL ending with /tryon in the Upload page.");
             }
 
             if (apiUrl.Contains("PUT-YOUR-COLAB-TUNNEL-HERE", StringComparison.OrdinalIgnoreCase) ||
                 apiUrl.Contains("PUT_YOUR_TRYON_API_URL_HERE", StringComparison.OrdinalIgnoreCase) ||
                 apiUrl.Contains("PASTE_", StringComparison.OrdinalIgnoreCase))
             {
-                return (false, null, "Colab API URL is still the placeholder. Run the Colab notebook, copy the printed URL ending with /tryon, and paste it in the Upload page.");
+                return (false, null, "Kaggle/Colab API URL is still the placeholder. Run the notebook, copy the printed Cloudflare URL ending with /tryon, and paste it in the Upload page.");
             }
 
             using var client = _httpClientFactory.CreateClient();
@@ -508,6 +506,7 @@ namespace VirtualFittingRoom.Services
             byte[] personImage,
             byte[] clothingImage,
             string garmentArea,
+            string? clothingType,
             CancellationToken cancellationToken)
         {
             var serverState = await _serverManager.EnsureServerReadyAsync(cancellationToken);
@@ -523,7 +522,8 @@ namespace VirtualFittingRoom.Services
             {
                 personImageBase64 = Convert.ToBase64String(personImage),
                 clothingImageBase64 = Convert.ToBase64String(clothingImage),
-                category = garmentArea
+                category = garmentArea,
+                clothingType = NormalizeClothingType(clothingType)
             };
 
             using var response = await PostLocalTryOnAsync(client, request, cancellationToken);
@@ -700,6 +700,11 @@ namespace VirtualFittingRoom.Services
                 "tee" => "t-shirt",
                 "tshirt" => "t-shirt",
                 "t-shirts" => "t-shirt",
+                "sports-shirt" => "jersey",
+                "sport-shirt" => "jersey",
+                "hockey-jersey" => "jersey",
+                "football-jersey" => "jersey",
+                "basketball-jersey" => "jersey",
                 "tanktop" => "tank-top",
                 "vest" => "tank-top",
                 "sleeveless" => "tank-top",
@@ -1183,7 +1188,7 @@ namespace VirtualFittingRoom.Services
             if (statusCode == 530 &&
                 responseText.Contains("1033", StringComparison.OrdinalIgnoreCase))
             {
-                return $"Colab/Cloudflare tunnel is not reachable. The saved API URL is down or expired: {apiUrl}. Keep the Colab notebook cell running, copy the new URL ending with /tryon, then paste it in the Upload page or update VirtualTryOn:ApiUrl.";
+                return $"Kaggle/Colab Cloudflare tunnel is not reachable. The saved API URL is down or expired: {apiUrl}. Keep the notebook cell running, copy the new URL ending with /tryon, then paste it in the Upload page or update VirtualTryOn:ApiUrl.";
             }
 
             return $"API returned HTTP {statusCode}: {responseText}";
@@ -1206,7 +1211,7 @@ namespace VirtualFittingRoom.Services
             if (message.Contains("No such host is known", StringComparison.OrdinalIgnoreCase) ||
                 message.Contains("trycloudflare.com", StringComparison.OrdinalIgnoreCase))
             {
-                message += " The Colab/Cloudflare tunnel URL is expired or not running. Start the Colab API cell again, copy the new /tryon URL, and paste it in the Upload page.";
+                message += " The Kaggle/Colab Cloudflare tunnel URL is expired or not running. Start the notebook API/tunnel cell again, copy the new /tryon URL, and paste it in the Upload page.";
             }
 
             return $"AI inference failed: {message}";

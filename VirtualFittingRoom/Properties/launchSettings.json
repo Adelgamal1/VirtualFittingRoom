@@ -1,4 +1,4 @@
-﻿{
+{
   "iisSettings": {
     "windowsAuthentication": false,
     "anonymousAuthentication": true,
@@ -15,9 +15,12 @@
       "applicationUrl": "http://localhost:5001",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "VirtualTryOn__Mode": "HuggingFace",
-        "VirtualTryOn__HuggingFaceSpaceUrl": "https://adelgamal1-virtual-fitting-room-ai.hf.space",
-        "VirtualTryOn__HuggingFaceApiName": "tryon"
+        "VirtualTryOn__Mode": "Api",
+        "VirtualTryOn__ApiUrl": "https://programmes-puts-puerto-luke.trycloudflare.com/tryon",
+        "VirtualTryOn__ApiPersonFieldName": "person_image",
+        "VirtualTryOn__ApiClothingFieldName": "garment_image",
+        "VirtualTryOn__ApiCategoryFieldName": "category",
+        "VirtualTryOn__ApiResponseImageField": "outputImageBase64"
       }
     },
     "IIS Express": {
@@ -25,9 +28,12 @@
       "launchBrowser": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "VirtualTryOn__Mode": "HuggingFace",
-        "VirtualTryOn__HuggingFaceSpaceUrl": "https://adelgamal1-virtual-fitting-room-ai.hf.space",
-        "VirtualTryOn__HuggingFaceApiName": "tryon"
+        "VirtualTryOn__Mode": "Api",
+        "VirtualTryOn__ApiUrl": "https://programmes-puts-puerto-luke.trycloudflare.com/tryon",
+        "VirtualTryOn__ApiPersonFieldName": "person_image",
+        "VirtualTryOn__ApiClothingFieldName": "garment_image",
+        "VirtualTryOn__ApiCategoryFieldName": "category",
+        "VirtualTryOn__ApiResponseImageField": "outputImageBase64"
       }
     }
   }

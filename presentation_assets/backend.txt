@@ -1,0 +1,148 @@
+
+--- PAGE 1 ---
+
+Virtual Fitting Room - Backend Showcase
+Visual overview of the most important backend work
+6/15/26, 6:00 PM
+Backend Showcase - Virtual Fitting Room
+file:///C:/Users/adelm/OneDrive%20-%20Egyptian%20E-Learning%20University/Desktop/VirtualFittingRoom/BACKEND_SHOWCASE_EN_PRINT.html
+1/8
+
+
+--- PAGE 2 ---
+
+6/15/26, 6:00 PM
+Backend Showcase - Virtual Fitting Room
+file:///C:/Users/adelm/OneDrive%20-%20Egyptian%20E-Learning%20University/Desktop/VirtualFittingRoom/BACKEND_SHOWCASE_EN_PRINT.html
+2/8
+
+
+--- PAGE 3 ---
+
+Database Schema
+Tables, primary keys, foreign key relationship, and stored data
+6/15/26, 6:00 PM
+Backend Showcase - Virtual Fitting Room
+file:///C:/Users/adelm/OneDrive%20-%20Egyptian%20E-Learning%20University/Desktop/VirtualFittingRoom/BACKEND_SHOWCASE_EN_PRINT.html
+3/8
+
+
+--- PAGE 4 ---
+
+6/15/26, 6:00 PM
+Backend Showcase - Virtual Fitting Room
+file:///C:/Users/adelm/OneDrive%20-%20Egyptian%20E-Learning%20University/Desktop/VirtualFittingRoom/BACKEND_SHOWCASE_EN_PRINT.html
+4/8
+
+
+--- PAGE 5 ---
+
+Backend Components
+MVC Architecture
+The project uses MVC to organize request handling, business
+logic, views, and data access.
+Controllers receive HTTP requests.
+Models represent data and validation rules.
+Services contain business logic.
+Data layer manages EF Core and SQL Server.
+Controllers
+Controllers coordinate the user flow and call services.
+TryOnController : try-on sessions and results.
+AccountController : login and password actions.
+RegistrationController : user registration.
+HistoryController : previous results.
+Services Layer
+Services keep backend logic outside controllers.
+VirtualTryOnService : AI communication.
+UploadTryOnService : upload pipeline.
+ImageProtectionService : protects result bytes.
+EmailService : reset password email flow.
+Database Layer
+EF Core maps C# models to SQL Server tables.
+UserMeasurements : users and body data.
+UserImages : generated results.
+Clothes : clothing catalog.
+Email is unique and user images cascade delete.
+6/15/26, 6:00 PM
+Backend Showcase - Virtual Fitting Room
+file:///C:/Users/adelm/OneDrive%20-%20Egyptian%20E-Learning%20University/Desktop/VirtualFittingRoom/BACKEND_SHOWCASE_EN_PRINT.html
+5/8
+
+
+--- PAGE 6 ---
+
+Core Features
+Authentication
+The backend manages user accounts and access.
+Register and login.
+Password hashing.
+Password reset token and expiry.
+Session-based user tracking.
+Virtual Try-On Pipeline
+This is the main backend workflow.
+Upload model and clothing images.
+Validate target body and clothing type.
+Resize and prepare images.
+Run AI inference and save result.
+AI Integration
+The app can switch between multiple AI backends using
+configuration.
+HuggingFace Space.
+Colab or external API.
+Local Python server.
+Replicate and preview fallback.
+Image Processing
+The backend prepares and stores image data.
+Converts uploaded files to bytes.
+Resizes images before inference.
+Saves MIME type.
+Stores generated images in the database.
+6/15/26, 6:00 PM
+Backend Showcase - Virtual Fitting Room
+file:///C:/Users/adelm/OneDrive%20-%20Egyptian%20E-Learning%20University/Desktop/VirtualFittingRoom/BACKEND_SHOWCASE_EN_PRINT.html
+6/8
+
+
+--- PAGE 7 ---
+
+Reliability and Configuration
+6/15/26, 6:00 PM
+Backend Showcase - Virtual Fitting Room
+file:///C:/Users/adelm/OneDrive%20-%20Egyptian%20E-Learning%20University/Desktop/VirtualFittingRoom/BACKEND_SHOWCASE_EN_PRINT.html
+7/8
+
+
+--- PAGE 8 ---
+
+Error Handling
+The backend handles real AI/network failures.
+HuggingFace unavailable.
+Expired Colab or Cloudflare tunnel.
+Local server connection issues.
+Premature response close.
+Fallback Preview
+If real AI inference fails, the app can still return a fast preview
+result.
+Prevents user flow from stopping.
+Improves demo reliability.
+Works without depending on one backend.
+Configuration
+Backend behavior is controlled without changing service
+code.
+appsettings.json
+appsettings.Development.json
+appsettings.Production.json
+Environment variables override settings.
+History and Deployment
+The backend stores results and is prepared for deployment.
+Users can view and download previous results.
+Dockerfile  and railway.json .
+Production config.
+HuggingFace and Colab docs.
+Summary
+The backend shows strong work because it includes MVC structure, EF Core database design, authentication, AI integration,
+image processing, protected result storage, fallback handling, history, configuration, and deployment readiness.
+6/15/26, 6:00 PM
+Backend Showcase - Virtual Fitting Room
+file:///C:/Users/adelm/OneDrive%20-%20Egyptian%20E-Learning%20University/Desktop/VirtualFittingRoom/BACKEND_SHOWCASE_EN_PRINT.html
+8/8

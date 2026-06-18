@@ -64,3 +64,12 @@ environment variable instead of committing it to `appsettings.json`.
 
 The Gradio API endpoint is `/call/tryon`; the MVC service already sends the inputs in
 the order this Space expects.
+
+## Fast natural T-shirt mode
+
+This Space defaults to a fast controlled renderer for upper-body T-shirts:
+
+- `VFR_FAST_CONTROLLED_ONLY=1` skips the diffusion model for upper garments and returns a fitted T-shirt render quickly.
+- `VFR_FORCE_CONTROLLED_UPPER=1` uses the controlled renderer for upper garments after diffusion if the fast path is disabled.
+
+Keep those defaults for a fast result similar to the project screenshots. To test the raw CatVTON model instead, set both variables to `0` in the Space settings.
